@@ -20,23 +20,7 @@ La primera vez que ejecutes el programa se abrirá el navegador para que autoric
 
 ---
 
-## 2. Credenciales de AliExpress (`config.py`)
-
-Solo necesarias si quieres usar funciones que dependan de la API de afiliados de AliExpress. Por ahora el programa no la usa activamente, pero el archivo debe existir.
-
-1. Regístrate en el [Portal de Afiliados de AliExpress](https://portals.aliexpress.com/)
-2. Ve a **Herramientas → API** para obtener tu App Key y App Secret
-3. Crea el archivo `config.py` con este contenido:
-
-```python
-ALIEXPRESS_APP_KEY = 'tu_app_key'
-ALIEXPRESS_APP_SECRET = 'tu_app_secret'
-ALIEXPRESS_TRACKING_ID = 'tu_tracking_id'
-```
-
----
-
-## 3. Cookies de AliExpress (`aliexpress_cookies.json`)
+## 2. Cookies de AliExpress (`aliexpress_cookies.json`)
 
 El programa abre Chrome y navega a las páginas de producto de AliExpress para comprobar si los links siguen activos. Para que AliExpress no lo trate como un bot necesita que le pases tu sesión iniciada, y eso se hace mediante las cookies. Tener una sesión activa reduce considerablemente la frecuencia con la que AliExpress muestra CAPTCHAs durante la comprobación.
 

@@ -29,7 +29,6 @@ Antes de ejecutar el programa necesitas crear estos archivos. Ver [SETUP.md](SET
 | Archivo | Descripción |
 |---|---|
 | `client_secret.json` | Credenciales OAuth de Google (API de YouTube) |
-| `config.py` | Credenciales de la API de afiliados de AliExpress |
 | `aliexpress_cookies.json` | Cookies de sesión de AliExpress |
 | `cupones.txt` | Bloque de cupones que se insertará en las descripciones |
 
