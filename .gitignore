@@ -2,6 +2,8 @@ client_secret.json
 token.pickle
 aliexpress_cookies.json
 links_rotos.txt
+cupones.txt
+exclusiones.txt
 screenshot_*.png
 __pycache__/
 *.pyc
