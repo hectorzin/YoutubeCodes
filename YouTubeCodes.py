@@ -534,26 +534,24 @@ def accion_videos_sin_cupones(videos, patron):
         return
 
     console.print(f'[bold]{len(sin_cupones)}[/bold] vídeos [yellow]sin[/yellow] bloque de cupones:\n')
-    for v in sin_cupones:
-        console.print(f'  [dim]·[/dim] {v["snippet"]["title"]}')
-        console.print(f'    [dim]https://studio.youtube.com/video/{v["id"]}[/dim]')
+    for i, v in enumerate(sin_cupones, 1):
+        console.print(f'  [bold]{i}.[/bold] {v["snippet"]["title"]}')
+        console.print(f'     [link=https://studio.youtube.com/video/{v["id"]}][blue]https://studio.youtube.com/video/{v["id"]}[/blue][/link]')
 
     console.print()
-    opciones = [
-        questionary.Choice(
-            title=f'{v["snippet"]["title"]}  →  studio.youtube.com/video/{v["id"]}',
-            value=v['id']
-        )
-        for v in sin_cupones
-    ]
-    seleccionados = questionary.checkbox(
-        'Selecciona los vídeos que no necesitan cupones (se excluirán en el futuro):',
-        choices=opciones,
-    ).ask()
+    respuesta = console.input(
+        '[dim]Introduce los números a excluir separados por comas (o Enter para ninguno): [/dim]'
+    ).strip()
 
-    if seleccionados:
-        guardar_exclusiones(set(seleccionados))
-        console.print(f'[green]✓ {len(seleccionados)} vídeos añadidos a exclusiones.[/green]')
+    if respuesta:
+        try:
+            indices = [int(n.strip()) - 1 for n in respuesta.split(',')]
+            seleccionados = {sin_cupones[i]['id'] for i in indices if 0 <= i < len(sin_cupones)}
+            if seleccionados:
+                guardar_exclusiones(seleccionados)
+                console.print(f'[green]✓ {len(seleccionados)} vídeos añadidos a exclusiones.[/green]')
+        except ValueError:
+            console.print('[red]Entrada no válida, no se guardó nada.[/red]')
 
 
 # ── Menú principal ────────────────────────────────────────────────────────────
