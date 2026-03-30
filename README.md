@@ -30,7 +30,7 @@ Antes de ejecutar el programa necesitas crear estos archivos. Ver [SETUP.md](SET
 |---|---|
 | `client_secret.json` | Credenciales OAuth de Google (API de YouTube) |
 | `config.py` | Credenciales de la API de afiliados de AliExpress |
-| `aliexpress_cookies.json` | Cookies de sesión de AliExpress |
+| `aliexpress_cookies.json` | Cookies de sesión de AliExpress (exportadas con [Cookie-Editor](https://cookie-editor.com/)) |
 | `cupones.txt` | Bloque de cupones que se insertará en las descripciones |
 
 ## cupones.txt
@@ -49,6 +49,14 @@ Ejemplo:
 El programa detecta el bloque en cada vídeo buscando la primera y última línea de este archivo, así que si cambias el texto asegúrate de actualizar el archivo antes de ejecutar.
 
 ## config.py
+
+Este archivo contiene las credenciales de la API de afiliados de AliExpress. Por ahora el programa no la usa activamente, pero el archivo debe existir.
+
+Para obtener los valores, regístrate en el [Portal de Afiliados de AliExpress](https://portals.aliexpress.com/) y ve a **Herramientas → API**:
+
+- `ALIEXPRESS_APP_KEY` — identificador de tu aplicación
+- `ALIEXPRESS_APP_SECRET` — clave secreta de tu aplicación
+- `ALIEXPRESS_TRACKING_ID` — tu ID de seguimiento de afiliado
 
 ```python
 ALIEXPRESS_APP_KEY = 'tu_app_key'
