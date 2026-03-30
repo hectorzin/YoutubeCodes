@@ -540,7 +540,10 @@ def accion_videos_sin_cupones(videos, patron):
 
     console.print()
     opciones = [
-        questionary.Choice(title=v['snippet']['title'], value=v['id'])
+        questionary.Choice(
+            title=f'{v["snippet"]["title"]}  →  https://studio.youtube.com/video/{v["id"]}',
+            value=v['id']
+        )
         for v in sin_cupones
     ]
     seleccionados = questionary.checkbox(
