@@ -534,36 +534,69 @@ def obtener_info_canal(youtube):
     }
 
 
-def dibujar_cabecera(info_canal, n_videos):
+def dibujar_cabecera(info_canal, n_videos, nuevo_bloque):
     ahora = datetime.now()
     mes = f'{MESES_ES[ahora.month][0]}{MESES_ES[ahora.month][1:].lower()} {ahora.year}'
-    handle = info_canal['handle'] or info_canal['nombre']
+    handle = info_canal['handle'] or ''
+    nombre = info_canal['nombre']
 
-    fila_titulo = Table.grid(expand=True, padding=(0, 1))
-    fila_titulo.add_column()
-    fila_titulo.add_column(justify='right')
-    fila_titulo.add_row(
-        Text.assemble(('◆ ', 'bold cyan'), ('YouTubeCodes', 'bold white')),
-        Text.assemble((handle, 'white'), (f'  ·  {n_videos} vídeos  ·  {mes}', 'dim')),
-    )
+    # ── Columna izquierda ──────────────────────────────────────────
+    izq = Table.grid(padding=(0, 0))
+    izq.add_column(no_wrap=True)
+    izq.add_row(Text.assemble(('¡Bienvenido, ', ''), (nombre + '!', 'bold white')))
+    izq.add_row('')
+    izq.add_row(Text('  ╔══════════╗', style='cyan'))
+    izq.add_row(Text('  ║   ▶  YT  ║', style='cyan'))
+    izq.add_row(Text('  ╚══════════╝', style='cyan'))
+    izq.add_row('')
+    info_txt = Text()
+    if handle:
+        info_txt.append(handle, style='white')
+        info_txt.append('  ·  ', style='dim')
+    info_txt.append(f'{n_videos} vídeos', style='dim')
+    info_txt.append('  ·  ', style='dim')
+    info_txt.append(mes, style='dim')
+    izq.add_row(info_txt)
 
-    fila_sub = Table.grid(expand=True, padding=(0, 1))
-    fila_sub.add_column()
-    fila_sub.add_column(justify='right')
-    fila_sub.add_row(
-        Text('Gestor de cupones de AliExpress', style='dim'),
-        Text('youtube.com', style='dim'),
-    )
+    # ── Columna derecha ────────────────────────────────────────────
+    der = Table.grid(padding=(0, 0))
+    der.add_column(no_wrap=True)
+    der.add_row(Text('Estado del canal', style='cyan bold'))
+    der.add_row(Text('─' * 24, style='bright_black'))
+    der.add_row('')
+    der.add_row(Text.assemble(('● ', 'green'), (f'{n_videos} vídeos en el canal', '')))
+    der.add_row('')
 
-    console.print()
-    console.print(fila_titulo)
-    console.print(fila_sub)
-    console.rule(style='bright_black')
+    if nuevo_bloque:
+        primera = nuevo_bloque.splitlines()[0]
+        der.add_row(Text('Cupones activos', style='cyan bold'))
+        der.add_row(Text('─' * 24, style='bright_black'))
+        der.add_row('')
+        der.add_row(Text.assemble(('● ', 'green'), (primera[:45], 'dim')))
+    else:
+        der.add_row(Text('Cupones', style='cyan bold'))
+        der.add_row(Text('─' * 24, style='bright_black'))
+        der.add_row('')
+        der.add_row(Text.assemble(('○ ', 'yellow'), ('cupones.txt no encontrado', 'dim')))
+
+    # ── Layout dos columnas ────────────────────────────────────────
+    grid = Table.grid(expand=True, padding=(0, 3))
+    grid.add_column(ratio=1)
+    grid.add_column(ratio=1)
+    grid.add_row(izq, der)
+
+    console.print(Panel(
+        grid,
+        title=Text.assemble((' ◆ ', 'bold cyan'), ('YouTubeCodes', 'bold white'), (' v1.0 ', 'dim')),
+        title_align='left',
+        border_style='cyan',
+        padding=(1, 2),
+    ))
 
 
-def mostrar_menu(info_canal, n_videos):
+def mostrar_menu(info_canal, n_videos, nuevo_bloque):
     console.clear()
-    dibujar_cabecera(info_canal, n_videos)
+    dibujar_cabecera(info_canal, n_videos, nuevo_bloque)
     console.print()
 
 
@@ -613,7 +646,7 @@ def main():
     opciones.append(OPT_SALIR)
 
     while True:
-        mostrar_menu(info_canal, len(videos))
+        mostrar_menu(info_canal, len(videos), nuevo_bloque)
         opcion = questionary.select(
             'Elige una opción:',
             choices=opciones,
