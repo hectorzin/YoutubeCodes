@@ -20,8 +20,12 @@ CHROME_USER_DATA = r'C:\Temp\chrome-debug' if sys.platform == 'win32' else '/tmp
 CHROME_PORT = 9222
 
 def iniciar_chrome():
-    subprocess.run(['taskkill', '/F', '/IM', 'chrome.exe'],
-                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    if sys.platform == 'win32':
+        subprocess.run(['taskkill', '/F', '/IM', 'chrome.exe'],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    else:
+        subprocess.run(['pkill', '-f', 'Google Chrome'],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     time.sleep(1)
     subprocess.Popen([CHROME_EXE, f'--remote-debugging-port={CHROME_PORT}',
                       f'--user-data-dir={CHROME_USER_DATA}',
@@ -38,8 +42,12 @@ def iniciar_chrome():
     sys.exit(1)
 
 def cerrar_chrome():
-    subprocess.run(['taskkill', '/F', '/IM', 'chrome.exe'],
-                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    if sys.platform == 'win32':
+        subprocess.run(['taskkill', '/F', '/IM', 'chrome.exe'],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    else:
+        subprocess.run(['pkill', '-f', 'Google Chrome'],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 URLS = [
     ('https://s.click.aliexpress.com/e/_EJf3Zdg',  'A INVESTIGAR'),

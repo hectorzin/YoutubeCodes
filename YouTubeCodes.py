@@ -174,10 +174,12 @@ def iniciar_chrome():
         return False
 
     print('Cerrando Chrome si está abierto...')
-    subprocess.run(
-        ['taskkill', '/F', '/IM', 'chrome.exe'],
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-    )
+    if sys.platform == 'win32':
+        subprocess.run(['taskkill', '/F', '/IM', 'chrome.exe'],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    else:
+        subprocess.run(['pkill', '-f', 'Google Chrome'],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     time.sleep(1)
 
     print(f'Arrancando Chrome con puerto de depuración {CHROME_DEBUG_PORT}...')
@@ -206,10 +208,12 @@ def iniciar_chrome():
 
 def cerrar_chrome():
     """Cierra Chrome."""
-    subprocess.run(
-        ['taskkill', '/F', '/IM', 'chrome.exe'],
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-    )
+    if sys.platform == 'win32':
+        subprocess.run(['taskkill', '/F', '/IM', 'chrome.exe'],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    else:
+        subprocess.run(['pkill', '-f', 'Google Chrome'],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
 def es_captcha(page):
