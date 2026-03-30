@@ -38,12 +38,11 @@ ALIEXPRESS_TRACKING_ID = 'tu_tracking_id'
 
 ## 3. Cookies de AliExpress (`aliexpress_cookies.json`)
 
-El programa abre Chrome y navega a las páginas de producto de AliExpress para comprobar si los links siguen activos. Para que AliExpress no lo trate como un bot necesita que le pases tu sesión iniciada, y eso se hace mediante las cookies.
+El programa abre Chrome y navega a las páginas de producto de AliExpress para comprobar si los links siguen activos. Para que AliExpress no lo trate como un bot necesita que le pases tu sesión iniciada, y eso se hace mediante las cookies. Tener una sesión activa reduce considerablemente la frecuencia con la que AliExpress muestra CAPTCHAs durante la comprobación.
 
 ### Cómo exportar las cookies
 
-1. Instala la extensión **Cookie-Editor** en Chrome
-   - [Chrome Web Store](https://chromewebstore.google.com/detail/cookie-editor/hlkenndednhfkekhgcdicdfddnkalmdm)
+1. Instala la extensión **Cookie-Editor** en Chrome: [cookie-editor.com](https://cookie-editor.com/)
 2. Inicia sesión en [AliExpress](https://es.aliexpress.com) con tu cuenta
 3. Con AliExpress abierto, haz clic en el icono de Cookie-Editor
 4. Pulsa el botón **Export** (esquina inferior derecha) → **Export as JSON**

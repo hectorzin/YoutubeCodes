@@ -482,7 +482,7 @@ def main():
                 elif resultado == 'demasiado_larga':
                     omitidos += 1
                     omitidos_lista.append(titulo)
-                    nueva_len = len(re.sub(construir_patron(nuevo_bloque), lambda _: nuevo_bloque,
+                    nueva_len = len(re.sub(patron, lambda _: nuevo_bloque,
                                           video['snippet']['description'], flags=re.DOTALL))
                     print(f'{ROJO}  [OMITIDO] Descripción demasiado larga ({nueva_len} chars, máx 5000){RST}')
 
