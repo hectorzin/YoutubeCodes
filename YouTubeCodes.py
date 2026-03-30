@@ -28,6 +28,7 @@ TOKEN_FILE = 'token.pickle'
 CREDENTIALS_FILE = 'client_secret.json'
 CUPONES_FILE = 'cupones.txt'
 REPORTE_LINKS_FILE = 'links_rotos.txt'
+EXCLUSIONES_FILE = 'sin_cupones_ok.txt'
 
 MESES_ES = {
     1: 'ENERO', 2: 'FEBRERO', 3: 'MARZO', 4: 'ABRIL',
@@ -506,21 +507,50 @@ def accion_comprobar_links(videos):
     guardar_reporte_links(links_rotos, links_geo)
 
 
+def cargar_exclusiones():
+    if not os.path.exists(EXCLUSIONES_FILE):
+        return set()
+    with open(EXCLUSIONES_FILE, 'r', encoding='utf-8') as f:
+        return {line.strip() for line in f if line.strip()}
+
+
+def guardar_exclusiones(ids):
+    existentes = cargar_exclusiones()
+    nuevas = existentes | ids
+    with open(EXCLUSIONES_FILE, 'w', encoding='utf-8') as f:
+        for vid_id in sorted(nuevas):
+            f.write(vid_id + '\n')
+
+
 def accion_videos_sin_cupones(videos, patron):
+    exclusiones = cargar_exclusiones()
     sin_cupones = [
         v for v in videos
         if not re.search(patron, v['snippet']['description'], re.DOTALL)
+        and v['id'] not in exclusiones
     ]
     if not sin_cupones:
-        console.print('[green]✓ Todos los vídeos tienen el bloque de cupones.[/green]')
+        console.print('[green]✓ Todos los vídeos tienen el bloque de cupones (o están excluidos).[/green]')
         return
 
     console.print(f'[bold]{len(sin_cupones)}[/bold] vídeos [yellow]sin[/yellow] bloque de cupones:\n')
     for v in sin_cupones:
-        vid_id = v['id']
-        titulo = v['snippet']['title']
-        console.print(f'  [dim]·[/dim] {titulo}')
-        console.print(f'    [dim]https://studio.youtube.com/video/{vid_id}[/dim]')
+        console.print(f'  [dim]·[/dim] {v["snippet"]["title"]}')
+        console.print(f'    [dim]https://studio.youtube.com/video/{v["id"]}[/dim]')
+
+    console.print()
+    opciones = [
+        questionary.Choice(title=v['snippet']['title'], value=v['id'])
+        for v in sin_cupones
+    ]
+    seleccionados = questionary.checkbox(
+        'Selecciona los vídeos que no necesitan cupones (se excluirán en el futuro):',
+        choices=opciones,
+    ).ask()
+
+    if seleccionados:
+        guardar_exclusiones(set(seleccionados))
+        console.print(f'[green]✓ {len(seleccionados)} vídeos añadidos a exclusiones.[/green]')
 
 
 # ── Menú principal ────────────────────────────────────────────────────────────
