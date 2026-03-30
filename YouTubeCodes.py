@@ -28,7 +28,7 @@ TOKEN_FILE = 'token.pickle'
 CREDENTIALS_FILE = 'client_secret.json'
 CUPONES_FILE = 'cupones.txt'
 REPORTE_LINKS_FILE = 'links_rotos.txt'
-EXCLUSIONES_FILE = 'sin_cupones_ok.txt'
+EXCLUSIONES_FILE = 'exclusiones.txt'
 
 MESES_ES = {
     1: 'ENERO', 2: 'FEBRERO', 3: 'MARZO', 4: 'ABRIL',

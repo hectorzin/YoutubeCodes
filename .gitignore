@@ -3,7 +3,7 @@ token.pickle
 aliexpress_cookies.json
 links_rotos.txt
 cupones.txt
-sin_cupones_ok.txt
+exclusiones.txt
 screenshot_*.png
 __pycache__/
 *.pyc
