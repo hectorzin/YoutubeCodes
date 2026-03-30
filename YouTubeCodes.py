@@ -541,7 +541,7 @@ def accion_videos_sin_cupones(videos, patron):
     console.print()
     opciones = [
         questionary.Choice(
-            title=f'{v["snippet"]["title"]}  \033[34mhttps://studio.youtube.com/video/{v["id"]}\033[0m',
+            title=f'{v["snippet"]["title"]}  →  studio.youtube.com/video/{v["id"]}',
             value=v['id']
         )
         for v in sin_cupones
