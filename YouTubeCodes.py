@@ -349,7 +349,7 @@ def _imprimir_grupo(items, simbolo, estilo):
         if item['video'] != video_actual:
             video_actual = item['video']
             console.print(f'\n  [bold]{item["video"]}[/bold]')
-            console.print(f'  [dim]https://www.youtube.com/watch?v={item["video_id"]}[/dim]')
+            console.print(f'  [dim]https://studio.youtube.com/video/{item["video_id"]}[/dim]')
         console.print(f'  [{estilo}]{simbolo}[/{estilo}] {item["linea"][:100]}')
         console.print(f'    [dim]{item["url"]}[/dim]')
 
@@ -360,7 +360,7 @@ def _escribir_grupo(f, items, simbolo):
         if item['video'] != video_actual:
             video_actual = item['video']
             f.write(f'\n  Video: {item["video"]}\n')
-            f.write(f'    https://www.youtube.com/watch?v={item["video_id"]}\n')
+            f.write(f'    https://studio.youtube.com/video/{item["video_id"]}\n')
         f.write(f'  {simbolo} {item["linea"]}\n')
         f.write(f'       URL: {item["url"]}\n')
 
@@ -520,7 +520,7 @@ def accion_videos_sin_cupones(videos, patron):
         vid_id = v['id']
         titulo = v['snippet']['title']
         console.print(f'  [dim]·[/dim] {titulo}')
-        console.print(f'    [dim]https://www.youtube.com/watch?v={vid_id}[/dim]')
+        console.print(f'    [dim]https://studio.youtube.com/video/{vid_id}[/dim]')
 
 
 # ── Menú principal ────────────────────────────────────────────────────────────
