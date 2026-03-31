@@ -557,15 +557,18 @@ def accion_videos_sin_cupones(videos, patron):
 # ── Menú principal ────────────────────────────────────────────────────────────
 
 def obtener_info_canal(youtube):
-    resp = youtube.channels().list(part='snippet', mine=True).execute()
-    item = resp['items'][0]['snippet']
+    resp = youtube.channels().list(part='snippet,statistics', mine=True).execute()
+    item = resp['items'][0]
+    stats = item['statistics']
     return {
-        'nombre': item['title'],
-        'handle': item.get('customUrl', ''),
+        'nombre': item['snippet']['title'],
+        'handle': item['snippet'].get('customUrl', ''),
+        'suscriptores': int(stats.get('subscriberCount', 0)),
+        'visualizaciones': int(stats.get('viewCount', 0)),
     }
 
 
-def dibujar_cabecera(info_canal, n_videos, nuevo_bloque):
+def dibujar_cabecera(info_canal, n_videos, nuevo_bloque, stats=None):
     ahora = datetime.now()
     mes = f'{MESES_ES[ahora.month][0]}{MESES_ES[ahora.month][1:].lower()} {ahora.year}'
     handle = info_canal['handle'] or ''
@@ -589,6 +592,16 @@ def dibujar_cabecera(info_canal, n_videos, nuevo_bloque):
     info_txt.append(mes, style='dim')
     izq.add_row(info_txt)
 
+    subs = info_canal.get('suscriptores', 0)
+    views = info_canal.get('visualizaciones', 0)
+    if subs or views:
+        izq.add_row('')
+        stats_txt = Text()
+        stats_txt.append(f'{subs:,} suscriptores'.replace(',', '.'), style='dim')
+        stats_txt.append('  ·  ', style='dim')
+        stats_txt.append(f'{views:,} visualizaciones'.replace(',', '.'), style='dim')
+        izq.add_row(stats_txt)
+
     # ── Columna derecha ────────────────────────────────────────────
     der = Table.grid(padding=(0, 0))
     der.add_column(no_wrap=True)
@@ -596,6 +609,12 @@ def dibujar_cabecera(info_canal, n_videos, nuevo_bloque):
     der.add_row(Text('─' * 24, style='bright_black'))
     der.add_row('')
     der.add_row(Text.assemble(('● ', 'green'), (f'{n_videos} vídeos en el canal', '')))
+    if stats:
+        con, sin, excl = stats['con_cupones'], stats['sin_cupones'], stats['excluidos']
+        der.add_row(Text.assemble(('● ', 'green'), (f'{con} con cupones', 'dim')))
+        der.add_row(Text.assemble(('● ', 'yellow' if sin else 'green'), (f'{sin} sin cupones', 'dim')))
+        if excl:
+            der.add_row(Text.assemble(('● ', 'dim'), (f'{excl} excluidos', 'dim')))
     der.add_row('')
 
     if nuevo_bloque:
@@ -625,9 +644,9 @@ def dibujar_cabecera(info_canal, n_videos, nuevo_bloque):
     ))
 
 
-def mostrar_menu(info_canal, n_videos, nuevo_bloque):
+def mostrar_menu(info_canal, n_videos, nuevo_bloque, stats=None):
     console.clear()
-    dibujar_cabecera(info_canal, n_videos, nuevo_bloque)
+    dibujar_cabecera(info_canal, n_videos, nuevo_bloque, stats)
     console.print()
 
 
@@ -676,8 +695,17 @@ def main():
         opciones.append(OPT_SIN_CUP)
     opciones.append(OPT_SALIR)
 
+    def calcular_stats():
+        if not patron:
+            return None
+        exclusiones = cargar_exclusiones()
+        con = sum(1 for v in videos if re.search(patron, v['snippet']['description'], re.DOTALL))
+        excl = sum(1 for v in videos if v['id'] in exclusiones)
+        sin = len(videos) - con - excl
+        return {'con_cupones': con, 'sin_cupones': sin, 'excluidos': excl}
+
     while True:
-        mostrar_menu(info_canal, len(videos), nuevo_bloque)
+        mostrar_menu(info_canal, len(videos), nuevo_bloque, calcular_stats())
         opcion = questionary.select(
             'Elige una opción:',
             choices=opciones,
