@@ -382,6 +382,7 @@ def guardar_estado_links(links_rotos, links_geo):
 
 
 def guardar_reporte_links(links_rotos, links_geo):
+    guardar_estado_links(links_rotos, links_geo)
     console.rule()
     if not links_rotos and not links_geo:
         console.print('[green]✓ No se encontraron links con problemas.[/green]')
@@ -409,8 +410,8 @@ def guardar_reporte_links(links_rotos, links_geo):
             f.write('-' * 60 + '\n')
             _escribir_grupo(f, links_geo, '⚠')
 
-    guardar_estado_links(links_rotos, links_geo)
-    console.print(f'\n[dim]Reporte guardado en "{REPORTE_LINKS_FILE}"[/dim]')
+    if links_rotos or links_geo:
+        console.print(f'\n[dim]Reporte guardado en "{REPORTE_LINKS_FILE}"[/dim]')
 
 
 def buscar_videos_con_cupones(videos, patron):
