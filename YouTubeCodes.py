@@ -677,6 +677,7 @@ def accion_comprobar_comentarios(youtube, videos, nuevo_bloque, patron, channel_
     actualizados = 0
     sin_actualizar = 0
     sin_cupones_count = 0
+    # sin_actualizar_lista: (titulo, vid_id, comment_id)
     sin_actualizar_lista = []
     sin_cupones_lista = []
 
@@ -703,16 +704,18 @@ def accion_comprobar_comentarios(youtube, videos, nuevo_bloque, patron, channel_
                 items = resp.get('items', [])
                 encontrado = False
                 if items:
-                    top = items[0]['snippet']['topLevelComment']['snippet']
+                    thread = items[0]
+                    top = thread['snippet']['topLevelComment']['snippet']
                     autor_id = top.get('authorChannelId', {}).get('value', '')
                     if autor_id == channel_id:
                         texto = top.get('textOriginal', '') or top.get('textDisplay', '')
+                        comment_id = thread['snippet']['topLevelComment']['id']
                         if nuevo_bloque in texto:
                             actualizados += 1
                             encontrado = True
                         elif re.search(patron, texto, re.DOTALL):
                             sin_actualizar += 1
-                            sin_actualizar_lista.append((titulo, vid_id))
+                            sin_actualizar_lista.append((titulo, vid_id, comment_id))
                             encontrado = True
                 if not encontrado:
                     sin_cupones_count += 1
@@ -732,15 +735,38 @@ def accion_comprobar_comentarios(youtube, videos, nuevo_bloque, patron, channel_
 
     if sin_actualizar_lista:
         console.print(f'\n[yellow bold]Sin actualizar ({len(sin_actualizar_lista)}):[/yellow bold]')
-        for titulo, vid_id in sin_actualizar_lista:
+        for titulo, vid_id, _ in sin_actualizar_lista:
             console.print(f'  [yellow]·[/yellow] {titulo}')
-            console.print(f'    [link=https://studio.youtube.com/video/{vid_id}][blue]https://studio.youtube.com/video/{vid_id}[/blue][/link]')
+            console.print(f'    [link=https://www.youtube.com/watch?v={vid_id}][blue]https://www.youtube.com/watch?v={vid_id}[/blue][/link]')
 
     if sin_cupones_lista:
         console.print(f'\n[red bold]Sin comentario fijado con cupones ({len(sin_cupones_lista)}):[/red bold]')
         for titulo, vid_id in sin_cupones_lista:
             console.print(f'  [red]·[/red] {titulo}')
-            console.print(f'    [link=https://studio.youtube.com/video/{vid_id}][blue]https://studio.youtube.com/video/{vid_id}[/blue][/link]')
+            console.print(f'    [link=https://www.youtube.com/watch?v={vid_id}][blue]https://www.youtube.com/watch?v={vid_id}[/blue][/link]')
+
+    if sin_actualizar_lista:
+        console.print()
+        coste = len(sin_actualizar_lista) * 50
+        console.print(f'  [dim]Coste de actualizar comentarios: [/dim][bold rgb(255,0,0)]~{coste} unidades[/bold rgb(255,0,0)]')
+        console.print(f'  [link=https://console.cloud.google.com/apis/api/youtube.googleapis.com/quotas][blue]Ver cuota disponible en Google Cloud →[/blue][/link]')
+        console.print()
+        if preguntar(f'¿Actualizar {len(sin_actualizar_lista)} comentario{"s" if len(sin_actualizar_lista) != 1 else ""}?'):
+            corregidos = 0
+            for titulo, vid_id, comment_id in sin_actualizar_lista:
+                try:
+                    youtube.comments().update(
+                        part='snippet',
+                        body={
+                            'id': comment_id,
+                            'snippet': {'textOriginal': nuevo_bloque},
+                        }
+                    ).execute()
+                    console.print(f'  [green]✓[/green] {titulo}')
+                    corregidos += 1
+                except Exception as e:
+                    console.print(f'  [red]✗[/red] {titulo}: {e}')
+            guardar_estado_comentarios(actualizados + corregidos, sin_actualizar - corregidos, sin_cupones_count)
 
 
 # ── Menú principal ────────────────────────────────────────────────────────────
