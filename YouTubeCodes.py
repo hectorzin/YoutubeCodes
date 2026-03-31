@@ -28,6 +28,7 @@ TOKEN_FILE = 'token.pickle'
 CREDENTIALS_FILE = 'client_secret.json'
 CUPONES_FILE = 'cupones.txt'
 REPORTE_LINKS_FILE = 'links_rotos.txt'
+LINKS_ESTADO_FILE  = 'links_estado.json'
 EXCLUSIONES_FILE = 'exclusiones.txt'
 
 MESES_ES = {
@@ -364,6 +365,22 @@ def _escribir_grupo(f, items, simbolo):
         f.write(f'  {simbolo} {item["linea"]}\n')
 
 
+def cargar_estado_links():
+    if not os.path.exists(LINKS_ESTADO_FILE):
+        return None
+    with open(LINKS_ESTADO_FILE, 'r', encoding='utf-8') as f:
+        return json.load(f)
+
+
+def guardar_estado_links(links_rotos, links_geo):
+    with open(LINKS_ESTADO_FILE, 'w', encoding='utf-8') as f:
+        json.dump({
+            'rotos': len({e['url'] for e in links_rotos}),
+            'geo': len({e['url'] for e in links_geo}),
+            'fecha': datetime.now().strftime('%d/%m/%Y %H:%M'),
+        }, f)
+
+
 def guardar_reporte_links(links_rotos, links_geo):
     console.rule()
     if not links_rotos and not links_geo:
@@ -392,6 +409,7 @@ def guardar_reporte_links(links_rotos, links_geo):
             f.write('-' * 60 + '\n')
             _escribir_grupo(f, links_geo, '⚠')
 
+    guardar_estado_links(links_rotos, links_geo)
     console.print(f'\n[dim]Reporte guardado en "{REPORTE_LINKS_FILE}"[/dim]')
 
 
@@ -624,7 +642,7 @@ def obtener_info_canal(youtube):
     }
 
 
-def dibujar_cabecera(info_canal, n_videos, nuevo_bloque, stats=None):
+def dibujar_cabecera(info_canal, n_videos, nuevo_bloque, stats=None, estado_links=None):
     ahora = datetime.now()
     mes = f'{MESES_ES[ahora.month][0]}{MESES_ES[ahora.month][1:].lower()} {ahora.year}'
     handle = info_canal['handle'] or ''
@@ -637,11 +655,11 @@ def dibujar_cabecera(info_canal, n_videos, nuevo_bloque, stats=None):
     izq.add_row('')
     yt_label = '   ▶  YouTube   '
     yt_pad   = ' ' * len(yt_label)
-    izq.add_row(Text.assemble(('  ', ''), (yt_pad, 'on red')))
-    izq.add_row(Text.assemble(('  ', ''), (yt_label, 'bold white on red')))
-    izq.add_row(Text.assemble(('  ', ''), (yt_pad, 'on red')))
+    izq.add_row(Text.assemble((' ' * 19, ''), (yt_pad, 'on red')))
+    izq.add_row(Text.assemble((' ' * 19, ''), (yt_label, 'bold white on red')))
+    izq.add_row(Text.assemble((' ' * 19, ''), (yt_pad, 'on red')))
     izq.add_row('')
-    info_txt = Text()
+    info_txt = Text(' ')
     if handle:
         info_txt.append(handle, style='white')
         info_txt.append('  ·  ', style='dim')
@@ -655,7 +673,7 @@ def dibujar_cabecera(info_canal, n_videos, nuevo_bloque, stats=None):
     views = info_canal.get('visualizaciones', 0)
     if subs or views:
         izq.add_row('')
-        stats_txt = Text()
+        stats_txt = Text(' ')
         stats_txt.append(f'{subs:,}'.replace(',', '.'), style='cyan')
         stats_txt.append(' suscriptores', style='dim')
         stats_txt.append('  ·  ', style='dim')
@@ -675,8 +693,18 @@ def dibujar_cabecera(info_canal, n_videos, nuevo_bloque, stats=None):
         der.add_row(Text.assemble(('● ', 'green'), (f'{con} ', 'cyan'), ('con cupones', 'dim')))
         der.add_row(Text.assemble(('● ', 'red'), (f'{sin} ', 'red' if sin else 'green'), ('sin cupones ', 'dim'), ('✗' if sin else '✓', 'red' if sin else 'green')))
         if excl:
-            der.add_row(Text.assemble(('● ', 'dark_orange'), (f'{excl} ', 'cyan'), ('excluidos', 'dim')))
+            der.add_row(Text.assemble(('● ', 'dark_orange'), (f'{excl} ', 'cyan'), ('excluidos (de cupones)', 'dim')))
     der.add_row('')
+
+    if estado_links:
+        der.add_row(Text('Links AliExpress', style='cyan bold'))
+        der.add_row(Text('─' * 24, style='bright_black'))
+        der.add_row('')
+        rotos, geo = estado_links['rotos'], estado_links['geo']
+        der.add_row(Text.assemble(('● ', 'red' if rotos else 'green'), (f'{rotos} ', 'red' if rotos else 'green'), ('rotos ', 'dim'), ('✗' if rotos else '✓', 'red' if rotos else 'green')))
+        der.add_row(Text.assemble(('● ', 'yellow' if geo else 'green'), (f'{geo} ', 'yellow' if geo else 'green'), ('no disponibles en tu región', 'dim')))
+        der.add_row(Text(f'  última comprobación: {estado_links["fecha"]}', style='dim'))
+        der.add_row('')
 
     if nuevo_bloque:
         primera = nuevo_bloque.splitlines()[0]
@@ -705,9 +733,9 @@ def dibujar_cabecera(info_canal, n_videos, nuevo_bloque, stats=None):
     ))
 
 
-def mostrar_menu(info_canal, n_videos, nuevo_bloque, stats=None):
+def mostrar_menu(info_canal, n_videos, nuevo_bloque, stats=None, estado_links=None):
     console.clear()
-    dibujar_cabecera(info_canal, n_videos, nuevo_bloque, stats)
+    dibujar_cabecera(info_canal, n_videos, nuevo_bloque, stats, estado_links)
     console.print()
 
 
@@ -770,7 +798,7 @@ def main():
         return {'con_cupones': con, 'sin_cupones': sin, 'excluidos': excl}
 
     while True:
-        mostrar_menu(info_canal, len(videos), nuevo_bloque, calcular_stats())
+        mostrar_menu(info_canal, len(videos), nuevo_bloque, calcular_stats(), cargar_estado_links())
         opcion = questionary.select(
             'Elige una opción:',
             choices=build_opciones(),
