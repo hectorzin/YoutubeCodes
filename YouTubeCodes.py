@@ -811,6 +811,19 @@ def dibujar_cabecera(info_canal, n_videos, nuevo_bloque, stats=None, estado_link
         izq.add_row('')
         izq.add_row(Text.assemble(('○ ', 'yellow'), ('cupones.txt no encontrado', 'dim')))
 
+    if estado_comentarios:
+        izq.add_row('')
+        izq.add_row(Text('Comentarios fijados', style='cyan bold'))
+        izq.add_row(Text('─' * 24, style='bright_black'))
+        izq.add_row('')
+        c_act = estado_comentarios['actualizados']
+        c_sin_act = estado_comentarios['sin_actualizar']
+        c_sin_cup = estado_comentarios['sin_cupones']
+        izq.add_row(Text.assemble(('● ', 'green'), (f'{c_act} ', 'green'), ('actualizados', 'dim')))
+        izq.add_row(Text.assemble(('● ', 'red' if c_sin_act else 'green'), (f'{c_sin_act} ', 'red' if c_sin_act else 'green'), ('sin actualizar', 'dim')))
+        izq.add_row(Text.assemble(('● ', 'yellow' if c_sin_cup else 'green'), (f'{c_sin_cup} ', 'yellow' if c_sin_cup else 'green'), ('sin cupones en comentario', 'dim')))
+        izq.add_row(Text(f'  última comprobación: {estado_comentarios["fecha"]}', style='dim'))
+
     # ── Columna derecha ────────────────────────────────────────────
     der = Table.grid(padding=(0, 0))
     der.add_column(no_wrap=True)
@@ -838,19 +851,6 @@ def dibujar_cabecera(info_canal, n_videos, nuevo_bloque, stats=None, estado_link
         der.add_row(Text.assemble(('● ', 'red' if rotos else 'green'), (f'{rotos} ', 'red' if rotos else 'green'), ('rotos ', 'dim'), ('✗' if rotos else '✓', 'red' if rotos else 'green')))
         der.add_row(Text.assemble(('● ', 'yellow' if geo else 'green'), (f'{geo} ', 'yellow' if geo else 'green'), ('no disponibles en tu región', 'dim')))
         der.add_row(Text(f'  última comprobación: {estado_links["fecha"]}', style='dim'))
-        der.add_row('')
-
-    if estado_comentarios:
-        der.add_row(Text('Comentarios fijados', style='cyan bold'))
-        der.add_row(Text('─' * 24, style='bright_black'))
-        der.add_row('')
-        act = estado_comentarios['actualizados']
-        sin_act = estado_comentarios['sin_actualizar']
-        sin_cup = estado_comentarios['sin_cupones']
-        der.add_row(Text.assemble(('● ', 'green'), (f'{act} ', 'green'), ('actualizados', 'dim')))
-        der.add_row(Text.assemble(('● ', 'red' if sin_act else 'green'), (f'{sin_act} ', 'red' if sin_act else 'green'), ('sin actualizar', 'dim')))
-        der.add_row(Text.assemble(('● ', 'yellow' if sin_cup else 'green'), (f'{sin_cup} ', 'yellow' if sin_cup else 'green'), ('sin cupones', 'dim')))
-        der.add_row(Text(f'  última comprobación: {estado_comentarios["fecha"]}', style='dim'))
         der.add_row('')
 
     # ── Layout dos columnas ────────────────────────────────────────
