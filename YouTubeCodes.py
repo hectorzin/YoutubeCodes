@@ -682,6 +682,20 @@ def dibujar_cabecera(info_canal, n_videos, nuevo_bloque, stats=None, estado_link
         stats_txt.append(' visualizaciones', style='dim')
         izq.add_row(stats_txt)
 
+    if nuevo_bloque:
+        primera = nuevo_bloque.splitlines()[0]
+        izq.add_row('')
+        izq.add_row(Text('Cupones activos', style='cyan bold'))
+        izq.add_row(Text('─' * 24, style='bright_black'))
+        izq.add_row('')
+        izq.add_row(Text.assemble(('● ', 'green'), (primera[:45], 'dim')))
+    else:
+        izq.add_row('')
+        izq.add_row(Text('Cupones', style='cyan bold'))
+        izq.add_row(Text('─' * 24, style='bright_black'))
+        izq.add_row('')
+        izq.add_row(Text.assemble(('○ ', 'yellow'), ('cupones.txt no encontrado', 'dim')))
+
     # ── Columna derecha ────────────────────────────────────────────
     der = Table.grid(padding=(0, 0))
     der.add_column(no_wrap=True)
@@ -695,8 +709,8 @@ def dibujar_cabecera(info_canal, n_videos, nuevo_bloque, stats=None, estado_link
         der.add_row(Text.assemble(('● ', 'red'), (f'{sin} ', 'red' if sin else 'green'), ('sin cupones ', 'dim'), ('✗' if sin else '✓', 'red' if sin else 'green')))
         act = stats.get('actualizados', 0)
         pend = stats.get('por_actualizar', 0)
-        der.add_row(Text.assemble(('  ', ''), (f'{act} ', 'green'), ('actualizados', 'dim')))
-        der.add_row(Text.assemble(('  ', ''), (f'{pend} ', 'red' if pend else 'green'), ('por actualizar ', 'dim'), ('✗' if pend else '✓', 'red' if pend else 'green')))
+        der.add_row(Text.assemble(('● ', 'green'), (f'{act} ', 'green'), ('actualizados', 'dim')))
+        der.add_row(Text.assemble(('● ', 'red' if pend else 'green'), (f'{pend} ', 'red' if pend else 'green'), ('por actualizar ', 'dim'), ('✗' if pend else '✓', 'red' if pend else 'green')))
         if excl:
             der.add_row(Text.assemble(('● ', 'dark_orange'), (f'{excl} ', 'cyan'), ('excluidos (de cupones)', 'dim')))
     der.add_row('')
@@ -710,18 +724,6 @@ def dibujar_cabecera(info_canal, n_videos, nuevo_bloque, stats=None, estado_link
         der.add_row(Text.assemble(('● ', 'yellow' if geo else 'green'), (f'{geo} ', 'yellow' if geo else 'green'), ('no disponibles en tu región', 'dim')))
         der.add_row(Text(f'  última comprobación: {estado_links["fecha"]}', style='dim'))
         der.add_row('')
-
-    if nuevo_bloque:
-        primera = nuevo_bloque.splitlines()[0]
-        der.add_row(Text('Cupones activos', style='cyan bold'))
-        der.add_row(Text('─' * 24, style='bright_black'))
-        der.add_row('')
-        der.add_row(Text.assemble(('● ', 'green'), (primera[:45], 'dim')))
-    else:
-        der.add_row(Text('Cupones', style='cyan bold'))
-        der.add_row(Text('─' * 24, style='bright_black'))
-        der.add_row('')
-        der.add_row(Text.assemble(('○ ', 'yellow'), ('cupones.txt no encontrado', 'dim')))
 
     # ── Layout dos columnas ────────────────────────────────────────
     grid = Table.grid(expand=True, padding=(0, 3))
