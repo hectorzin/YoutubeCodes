@@ -461,18 +461,22 @@ def accion_actualizar_cupones(youtube, videos, nuevo_bloque, patron):
         return
 
     console.print(Panel(nuevo_bloque, title='Bloque de cupones a usar', border_style='cyan'))
+    pendientes_list = [v for v in videos_con_cupones if nuevo_bloque not in v['snippet']['description']]
+    pendientes = len(pendientes_list)
+    pendientes_ids = {v['id'] for v in pendientes_list}
+
     console.print(f'\n[bold]{len(videos_con_cupones)}[/bold] vídeos con cupones encontrados\n')
     for v in videos_con_cupones:
-        console.print(f'  [dim]·[/dim] {v["snippet"]["title"]}')
+        estilo = 'white' if v['id'] in pendientes_ids else 'dim'
+        console.print(f'  [dim]·[/dim] [{estilo}]{v["snippet"]["title"]}[/{estilo}]')
 
-    pendientes = sum(1 for v in videos_con_cupones if nuevo_bloque not in v['snippet']['description'])
-    lecturas = 1 + (len(videos) // 50 + 1) * 2  # channels + playlistItems + videos.list
+    lecturas = 1 + (len(videos) // 50 + 1) * 2
     coste = pendientes * 50 + lecturas
     console.print()
     console.print(f'  [dim]Vídeos a modificar: [bold]{pendientes}[/bold]  ·  coste estimado: [bold]~{coste} unidades[/bold][/dim]')
     console.print(f'  [link=https://console.cloud.google.com/apis/api/youtube.googleapis.com/quotas][blue]Ver cuota disponible en Google Cloud →[/blue][/link]')
     console.print()
-    if not preguntar(f'¿Actualizar los [bold]{len(videos_con_cupones)}[/bold] vídeos?'):
+    if not preguntar(f'¿Actualizar [bold]{pendientes}[/bold] vídeo{"s" if pendientes != 1 else ""}?'):
         console.print('[yellow]Cancelado.[/yellow]')
         return
 
@@ -488,19 +492,21 @@ def accion_actualizar_cupones(youtube, videos, nuevo_bloque, patron):
         TextColumn('[dim]{task.fields[titulo]}[/dim]'),
         console=console,
     ) as progress:
-        task = progress.add_task('Actualizando', total=len(videos_con_cupones), titulo='')
+        task = progress.add_task('Actualizando', total=pendientes, titulo='')
         for video in videos_con_cupones:
             titulo = video['snippet']['title']
-            progress.update(task, titulo=titulo[:60])
             resultado = actualizar_video(youtube, video, nuevo_bloque, patron)
             if resultado == 'ok':
                 actualizados += 1
+                progress.update(task, titulo=titulo[:60])
+                progress.advance(task)
             elif resultado == 'sin_cambios':
                 sin_cambios += 1
             elif resultado == 'demasiado_larga':
                 omitidos += 1
                 omitidos_lista.append((titulo, video['id']))
-            progress.advance(task)
+                progress.update(task, titulo=titulo[:60])
+                progress.advance(task)
 
     console.print()
     console.rule()
