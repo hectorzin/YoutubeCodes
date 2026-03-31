@@ -516,7 +516,7 @@ def accion_comprobar_links(youtube, videos):
         for url in extraer_links_aliexpress(v['snippet']['description'])
     }
     console.print(f'[bold]{len(links_unicos)}[/bold] links únicos de AliExpress encontrados.')
-    console.print('[dim]AVISO: Esto cerrará Chrome y lo abrirá en modo depuración.[/dim]\n')
+    console.print('[red]AVISO: Esto cerrará Chrome y lo abrirá en modo depuración.[/red]\n')
     if not preguntar('¿Comprobar si están activos?'):
         console.print('[yellow]Cancelado.[/yellow]')
         return
@@ -531,6 +531,9 @@ def accion_comprobar_links(youtube, videos):
     console.print('\n[bold]Links con problemas:[/bold]\n')
     for i, url in enumerate(urls_unicas, 1):
         console.print(f'  [bold]{i}.[/bold] {url}')
+        for e in todos_problemas:
+            if e['url'] == url:
+                console.print(f'     [dim]· {e["video"]}[/dim]')
 
     console.print()
     while True:
@@ -554,15 +557,27 @@ def cargar_exclusiones():
     if not os.path.exists(EXCLUSIONES_FILE):
         return set()
     with open(EXCLUSIONES_FILE, 'r', encoding='utf-8') as f:
-        return {line.strip() for line in f if line.strip()}
+        return {line.split('#')[0].strip() for line in f if line.strip() and not line.startswith('#')}
 
 
-def guardar_exclusiones(ids):
-    existentes = cargar_exclusiones()
-    nuevas = existentes | ids
+def guardar_exclusiones(videos_nuevos):
+    # Leer entradas actuales (id + comentario) para no perder títulos ya guardados
+    entradas = {}
+    if os.path.exists(EXCLUSIONES_FILE):
+        with open(EXCLUSIONES_FILE, 'r', encoding='utf-8') as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith('#'):
+                    vid_id = line.split('#')[0].strip()
+                    entradas[vid_id] = line
+    # Añadir los nuevos con su título
+    for video in videos_nuevos:
+        vid_id = video['id']
+        titulo = video['snippet']['title']
+        entradas[vid_id] = f'{vid_id}  # {titulo}'
     with open(EXCLUSIONES_FILE, 'w', encoding='utf-8') as f:
-        for vid_id in sorted(nuevas):
-            f.write(vid_id + '\n')
+        for vid_id in sorted(entradas):
+            f.write(entradas[vid_id] + '\n')
 
 
 def accion_videos_sin_cupones(videos, patron):
@@ -589,7 +604,7 @@ def accion_videos_sin_cupones(videos, patron):
     if respuesta:
         try:
             indices = [int(n.strip()) - 1 for n in respuesta.split(',')]
-            seleccionados = {sin_cupones[i]['id'] for i in indices if 0 <= i < len(sin_cupones)}
+            seleccionados = [sin_cupones[i] for i in indices if 0 <= i < len(sin_cupones)]
             if seleccionados:
                 guardar_exclusiones(seleccionados)
                 console.print(f'[green]✓ {len(seleccionados)} vídeos añadidos a exclusiones.[/green]')
