@@ -617,7 +617,7 @@ def dibujar_cabecera(info_canal, n_videos, nuevo_bloque, stats=None):
     if stats:
         con, sin, excl = stats['con_cupones'], stats['sin_cupones'], stats['excluidos']
         der.add_row(Text.assemble(('● ', 'green'), (f'{con} ', 'cyan'), ('con cupones', 'dim')))
-        der.add_row(Text.assemble(('● ', 'red'), (f'{sin} ', 'cyan'), ('sin cupones', 'dim')))
+        der.add_row(Text.assemble(('● ', 'red'), (f'{sin} ', 'red' if sin else 'green'), ('sin cupones', 'dim')))
         if excl:
             der.add_row(Text.assemble(('● ', 'dark_orange'), (f'{excl} ', 'cyan'), ('excluidos', 'dim')))
     der.add_row('')
