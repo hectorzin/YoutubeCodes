@@ -28,7 +28,8 @@ TOKEN_FILE = 'token.pickle'
 CREDENTIALS_FILE = 'client_secret.json'
 CUPONES_FILE = 'cupones.txt'
 REPORTE_LINKS_FILE = 'links_rotos.txt'
-LINKS_ESTADO_FILE  = 'links_estado.json'
+LINKS_ESTADO_FILE       = 'links_estado.json'
+COMENTARIOS_ESTADO_FILE = 'comentarios_estado.json'
 EXCLUSIONES_FILE = 'exclusiones.txt'
 
 MESES_ES = {
@@ -381,6 +382,23 @@ def guardar_estado_links(links_rotos, links_geo):
         }, f)
 
 
+def cargar_estado_comentarios():
+    if not os.path.exists(COMENTARIOS_ESTADO_FILE):
+        return None
+    with open(COMENTARIOS_ESTADO_FILE, 'r', encoding='utf-8') as f:
+        return json.load(f)
+
+
+def guardar_estado_comentarios(actualizados, sin_actualizar, sin_cupones):
+    with open(COMENTARIOS_ESTADO_FILE, 'w', encoding='utf-8') as f:
+        json.dump({
+            'actualizados': actualizados,
+            'sin_actualizar': sin_actualizar,
+            'sin_cupones': sin_cupones,
+            'fecha': datetime.now().strftime('%d/%m/%Y %H:%M'),
+        }, f)
+
+
 def guardar_reporte_links(links_rotos, links_geo):
     guardar_estado_links(links_rotos, links_geo)
     console.rule()
@@ -642,6 +660,89 @@ def accion_videos_sin_cupones(videos, patron):
             console.print('[red]Entrada no válida, no se guardó nada.[/red]')
 
 
+def accion_comprobar_comentarios(youtube, videos, nuevo_bloque, patron, channel_id):
+    videos_con_cupones = buscar_videos_con_cupones(videos, patron)
+    if not videos_con_cupones:
+        console.print('[yellow]No hay vídeos con cupones.[/yellow]')
+        return
+
+    n = len(videos_con_cupones)
+    console.print(f'[bold]{n}[/bold] vídeos con cupones. Coste estimado: [bold rgb(255,0,0)]~{n} unidades[/bold rgb(255,0,0)]')
+    console.print(f'  [link=https://console.cloud.google.com/apis/api/youtube.googleapis.com/quotas][blue]Ver cuota disponible en Google Cloud →[/blue][/link]')
+    console.print()
+    if not preguntar(f'¿Comprobar comentarios fijados de {n} vídeo{"s" if n != 1 else ""}?'):
+        console.print('[yellow]Cancelado.[/yellow]')
+        return
+
+    actualizados = 0
+    sin_actualizar = 0
+    sin_cupones_count = 0
+    sin_actualizar_lista = []
+    sin_cupones_lista = []
+
+    with Progress(
+        SpinnerColumn(),
+        TextColumn('[progress.description]{task.description}'),
+        BarColumn(),
+        MofNCompleteColumn(),
+        TextColumn('[dim]{task.fields[titulo]}[/dim]'),
+        console=console,
+    ) as progress:
+        task = progress.add_task('Comprobando comentarios', total=n, titulo='')
+        for video in videos_con_cupones:
+            titulo = video['snippet']['title']
+            vid_id = video['id']
+            progress.update(task, titulo=titulo[:60])
+            try:
+                resp = youtube.commentThreads().list(
+                    part='snippet',
+                    videoId=vid_id,
+                    maxResults=1,
+                    order='relevance',
+                ).execute()
+                items = resp.get('items', [])
+                encontrado = False
+                if items:
+                    top = items[0]['snippet']['topLevelComment']['snippet']
+                    autor_id = top.get('authorChannelId', {}).get('value', '')
+                    if autor_id == channel_id:
+                        texto = top.get('textOriginal', '') or top.get('textDisplay', '')
+                        if nuevo_bloque in texto:
+                            actualizados += 1
+                            encontrado = True
+                        elif re.search(patron, texto, re.DOTALL):
+                            sin_actualizar += 1
+                            sin_actualizar_lista.append((titulo, vid_id))
+                            encontrado = True
+                if not encontrado:
+                    sin_cupones_count += 1
+                    sin_cupones_lista.append((titulo, vid_id))
+            except Exception:
+                sin_cupones_count += 1
+                sin_cupones_lista.append((titulo, vid_id))
+            progress.advance(task)
+
+    guardar_estado_comentarios(actualizados, sin_actualizar, sin_cupones_count)
+
+    console.print()
+    console.rule()
+    console.print(f'[green]✓[/green] Actualizados: [bold green]{actualizados}[/bold green]  ·  '
+                  f'[yellow]⚠[/yellow] Sin actualizar: [bold yellow]{sin_actualizar}[/bold yellow]  ·  '
+                  f'[red]✗[/red] Sin cupones: [bold red]{sin_cupones_count}[/bold red]')
+
+    if sin_actualizar_lista:
+        console.print(f'\n[yellow bold]Sin actualizar ({len(sin_actualizar_lista)}):[/yellow bold]')
+        for titulo, vid_id in sin_actualizar_lista:
+            console.print(f'  [yellow]·[/yellow] {titulo}')
+            console.print(f'    [link=https://studio.youtube.com/video/{vid_id}][blue]https://studio.youtube.com/video/{vid_id}[/blue][/link]')
+
+    if sin_cupones_lista:
+        console.print(f'\n[red bold]Sin comentario fijado con cupones ({len(sin_cupones_lista)}):[/red bold]')
+        for titulo, vid_id in sin_cupones_lista:
+            console.print(f'  [red]·[/red] {titulo}')
+            console.print(f'    [link=https://studio.youtube.com/video/{vid_id}][blue]https://studio.youtube.com/video/{vid_id}[/blue][/link]')
+
+
 # ── Menú principal ────────────────────────────────────────────────────────────
 
 def obtener_info_canal(youtube):
@@ -649,6 +750,7 @@ def obtener_info_canal(youtube):
     item = resp['items'][0]
     stats = item['statistics']
     return {
+        'id': item['id'],
         'nombre': item['snippet']['title'],
         'handle': item['snippet'].get('customUrl', ''),
         'suscriptores': int(stats.get('subscriberCount', 0)),
@@ -656,7 +758,7 @@ def obtener_info_canal(youtube):
     }
 
 
-def dibujar_cabecera(info_canal, n_videos, nuevo_bloque, stats=None, estado_links=None):
+def dibujar_cabecera(info_canal, n_videos, nuevo_bloque, stats=None, estado_links=None, estado_comentarios=None):
     ahora = datetime.now()
     mes = f'{MESES_ES[ahora.month][0]}{MESES_ES[ahora.month][1:].lower()} {ahora.year}'
     handle = info_canal['handle'] or ''
@@ -738,6 +840,19 @@ def dibujar_cabecera(info_canal, n_videos, nuevo_bloque, stats=None, estado_link
         der.add_row(Text(f'  última comprobación: {estado_links["fecha"]}', style='dim'))
         der.add_row('')
 
+    if estado_comentarios:
+        der.add_row(Text('Comentarios fijados', style='cyan bold'))
+        der.add_row(Text('─' * 24, style='bright_black'))
+        der.add_row('')
+        act = estado_comentarios['actualizados']
+        sin_act = estado_comentarios['sin_actualizar']
+        sin_cup = estado_comentarios['sin_cupones']
+        der.add_row(Text.assemble(('● ', 'green'), (f'{act} ', 'green'), ('actualizados', 'dim')))
+        der.add_row(Text.assemble(('● ', 'red' if sin_act else 'green'), (f'{sin_act} ', 'red' if sin_act else 'green'), ('sin actualizar', 'dim')))
+        der.add_row(Text.assemble(('● ', 'yellow' if sin_cup else 'green'), (f'{sin_cup} ', 'yellow' if sin_cup else 'green'), ('sin cupones', 'dim')))
+        der.add_row(Text(f'  última comprobación: {estado_comentarios["fecha"]}', style='dim'))
+        der.add_row('')
+
     # ── Layout dos columnas ────────────────────────────────────────
     grid = Table.grid(expand=True, padding=(0, 3))
     grid.add_column(ratio=1)
@@ -753,9 +868,9 @@ def dibujar_cabecera(info_canal, n_videos, nuevo_bloque, stats=None, estado_link
     ))
 
 
-def mostrar_menu(info_canal, n_videos, nuevo_bloque, stats=None, estado_links=None):
+def mostrar_menu(info_canal, n_videos, nuevo_bloque, stats=None, estado_links=None, estado_comentarios=None):
     console.clear()
-    dibujar_cabecera(info_canal, n_videos, nuevo_bloque, stats, estado_links)
+    dibujar_cabecera(info_canal, n_videos, nuevo_bloque, stats, estado_links, estado_comentarios)
     console.print()
 
 
@@ -791,11 +906,14 @@ def main():
         info_canal = obtener_info_canal(youtube)
     console.print(f'[green]✓[/green] [bold]{len(videos)}[/bold] vídeos en el canal')
 
-    OPT_CUPONES  = 'Actualizar cupones en las descripciones'
-    OPT_LINKS    = 'Comprobar links de AliExpress'
-    OPT_SIN_CUP  = 'Ver vídeos sin bloque de cupones'
-    OPT_RESCAN   = 'Recargar vídeos del canal'
-    OPT_SALIR    = 'Salir'
+    OPT_CUPONES      = 'Actualizar cupones en las descripciones'
+    OPT_LINKS        = 'Comprobar links de AliExpress'
+    OPT_SIN_CUP      = 'Ver vídeos sin bloque de cupones'
+    OPT_COMENTARIOS  = 'Comprobar comentarios fijados con cupones'
+    OPT_RESCAN       = 'Recargar vídeos del canal'
+    OPT_SALIR        = 'Salir'
+
+    channel_id = info_canal['id']
 
     def build_opciones():
         ops = []
@@ -804,6 +922,7 @@ def main():
         ops.append(OPT_LINKS)
         if nuevo_bloque:
             ops.append(OPT_SIN_CUP)
+            ops.append(OPT_COMENTARIOS)
         ops.append(OPT_RESCAN)
         ops.append(OPT_SALIR)
         return ops
@@ -826,7 +945,8 @@ def main():
         }
 
     while True:
-        mostrar_menu(info_canal, len(videos), nuevo_bloque, calcular_stats(), cargar_estado_links())
+        mostrar_menu(info_canal, len(videos), nuevo_bloque, calcular_stats(),
+                     cargar_estado_links(), cargar_estado_comentarios())
         opcion = questionary.select(
             'Elige una opción:',
             choices=build_opciones(),
@@ -850,6 +970,8 @@ def main():
             accion_comprobar_links(youtube, videos)
         elif opcion == OPT_SIN_CUP:
             accion_videos_sin_cupones(videos, patron)
+        elif opcion == OPT_COMENTARIOS:
+            accion_comprobar_comentarios(youtube, videos, nuevo_bloque, patron, channel_id)
 
         console.print()
         console.rule(style='bright_black')
