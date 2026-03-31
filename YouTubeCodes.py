@@ -712,6 +712,10 @@ def dibujar_cabecera(info_canal, n_videos, nuevo_bloque, stats=None, estado_link
         pend = stats.get('por_actualizar', 0)
         der.add_row(Text.assemble(('● ', 'green'), (f'{act} ', 'green'), ('actualizados', 'dim')))
         der.add_row(Text.assemble(('● ', 'red' if pend else 'green'), (f'{pend} ', 'red' if pend else 'green'), ('por actualizar ', 'dim'), ('✗' if pend else '✓', 'red' if pend else 'green')))
+        if pend:
+            coste = pend * 17
+            der.add_row(Text.assemble(('  ', ''), (f'~{coste} unidades estimadas  ', 'dim'),
+                ('[link=https://console.cloud.google.com/apis/api/youtube.googleapis.com/quotas]ver cuota[/link]', 'blue dim')))
         if excl:
             der.add_row(Text.assemble(('● ', 'dark_orange'), (f'{excl} ', 'cyan'), ('excluidos (de cupones)', 'dim')))
     der.add_row('')
