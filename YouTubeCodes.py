@@ -579,15 +579,18 @@ def dibujar_cabecera(info_canal, n_videos, nuevo_bloque, stats=None):
     izq.add_column(no_wrap=True)
     izq.add_row(Text.assemble(('¡Bienvenido, ', ''), (nombre + '!', 'bold white')))
     izq.add_row('')
-    izq.add_row(Text('  ╔══════════╗', style='cyan'))
-    izq.add_row(Text('  ║   ▶  YT  ║', style='cyan'))
-    izq.add_row(Text('  ╚══════════╝', style='cyan'))
+    yt_label = '   ▶  YouTube   '
+    yt_pad   = ' ' * len(yt_label)
+    izq.add_row(Text.assemble(('  ', ''), (yt_pad, 'on red')))
+    izq.add_row(Text.assemble(('  ', ''), (yt_label, 'bold white on red')))
+    izq.add_row(Text.assemble(('  ', ''), (yt_pad, 'on red')))
     izq.add_row('')
     info_txt = Text()
     if handle:
         info_txt.append(handle, style='white')
         info_txt.append('  ·  ', style='dim')
-    info_txt.append(f'{n_videos} vídeos', style='dim')
+    info_txt.append(f'{n_videos}', style='cyan')
+    info_txt.append(' vídeos', style='dim')
     info_txt.append('  ·  ', style='dim')
     info_txt.append(mes, style='dim')
     izq.add_row(info_txt)
@@ -597,9 +600,11 @@ def dibujar_cabecera(info_canal, n_videos, nuevo_bloque, stats=None):
     if subs or views:
         izq.add_row('')
         stats_txt = Text()
-        stats_txt.append(f'{subs:,} suscriptores'.replace(',', '.'), style='dim')
+        stats_txt.append(f'{subs:,}'.replace(',', '.'), style='cyan')
+        stats_txt.append(' suscriptores', style='dim')
         stats_txt.append('  ·  ', style='dim')
-        stats_txt.append(f'{views:,} visualizaciones'.replace(',', '.'), style='dim')
+        stats_txt.append(f'{views:,}'.replace(',', '.'), style='cyan')
+        stats_txt.append(' visualizaciones', style='dim')
         izq.add_row(stats_txt)
 
     # ── Columna derecha ────────────────────────────────────────────
@@ -608,13 +613,13 @@ def dibujar_cabecera(info_canal, n_videos, nuevo_bloque, stats=None):
     der.add_row(Text('Estado del canal', style='cyan bold'))
     der.add_row(Text('─' * 24, style='bright_black'))
     der.add_row('')
-    der.add_row(Text.assemble(('● ', 'green'), (f'{n_videos} vídeos en el canal', '')))
+    der.add_row(Text.assemble(('● ', 'blue'), (f'{n_videos} ', ''), ('vídeos en el canal', 'dim')))
     if stats:
         con, sin, excl = stats['con_cupones'], stats['sin_cupones'], stats['excluidos']
-        der.add_row(Text.assemble(('● ', 'green'), (f'{con} con cupones', 'dim')))
-        der.add_row(Text.assemble(('● ', 'yellow' if sin else 'green'), (f'{sin} sin cupones', 'dim')))
+        der.add_row(Text.assemble(('● ', 'green'), (f'{con} ', 'cyan'), ('con cupones', 'dim')))
+        der.add_row(Text.assemble(('● ', 'red'), (f'{sin} ', 'cyan'), ('sin cupones', 'dim')))
         if excl:
-            der.add_row(Text.assemble(('● ', 'dim'), (f'{excl} excluidos', 'dim')))
+            der.add_row(Text.assemble(('● ', 'dark_orange'), (f'{excl} ', 'cyan'), ('excluidos', 'dim')))
     der.add_row('')
 
     if nuevo_bloque:
@@ -685,15 +690,19 @@ def main():
     OPT_CUPONES  = 'Actualizar cupones en las descripciones'
     OPT_LINKS    = 'Comprobar links de AliExpress'
     OPT_SIN_CUP  = 'Ver vídeos sin bloque de cupones'
+    OPT_RESCAN   = 'Recargar vídeos del canal'
     OPT_SALIR    = 'Salir'
 
-    opciones = []
-    if nuevo_bloque:
-        opciones.append(OPT_CUPONES)
-    opciones.append(OPT_LINKS)
-    if nuevo_bloque:
-        opciones.append(OPT_SIN_CUP)
-    opciones.append(OPT_SALIR)
+    def build_opciones():
+        ops = []
+        if nuevo_bloque:
+            ops.append(OPT_CUPONES)
+        ops.append(OPT_LINKS)
+        if nuevo_bloque:
+            ops.append(OPT_SIN_CUP)
+        ops.append(OPT_RESCAN)
+        ops.append(OPT_SALIR)
+        return ops
 
     def calcular_stats():
         if not patron:
@@ -708,7 +717,7 @@ def main():
         mostrar_menu(info_canal, len(videos), nuevo_bloque, calcular_stats())
         opcion = questionary.select(
             'Elige una opción:',
-            choices=opciones,
+            choices=build_opciones(),
             use_shortcuts=False,
         ).ask()
 
@@ -716,6 +725,11 @@ def main():
             console.clear()
             console.print('[dim]Hasta luego.[/dim]')
             break
+
+        if opcion == OPT_RESCAN:
+            with console.status('[bold]Recargando vídeos del canal...[/bold]'):
+                videos = obtener_todos_los_videos(youtube)
+            continue
 
         console.print()
         if opcion == OPT_CUPONES:
