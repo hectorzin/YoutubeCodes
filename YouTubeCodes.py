@@ -693,6 +693,10 @@ def dibujar_cabecera(info_canal, n_videos, nuevo_bloque, stats=None, estado_link
         con, sin, excl = stats['con_cupones'], stats['sin_cupones'], stats['excluidos']
         der.add_row(Text.assemble(('● ', 'green'), (f'{con} ', 'cyan'), ('con cupones', 'dim')))
         der.add_row(Text.assemble(('● ', 'red'), (f'{sin} ', 'red' if sin else 'green'), ('sin cupones ', 'dim'), ('✗' if sin else '✓', 'red' if sin else 'green')))
+        act = stats.get('actualizados', 0)
+        pend = stats.get('por_actualizar', 0)
+        der.add_row(Text.assemble(('  ', ''), (f'{act} ', 'green'), ('actualizados', 'dim')))
+        der.add_row(Text.assemble(('  ', ''), (f'{pend} ', 'red' if pend else 'green'), ('por actualizar ', 'dim'), ('✗' if pend else '✓', 'red' if pend else 'green')))
         if excl:
             der.add_row(Text.assemble(('● ', 'dark_orange'), (f'{excl} ', 'cyan'), ('excluidos (de cupones)', 'dim')))
     der.add_row('')
@@ -793,10 +797,18 @@ def main():
         if not patron:
             return None
         exclusiones = cargar_exclusiones()
-        con = sum(1 for v in videos if re.search(patron, v['snippet']['description'], re.DOTALL))
+        con_cupones = [v for v in videos if re.search(patron, v['snippet']['description'], re.DOTALL)]
         excl = sum(1 for v in videos if v['id'] in exclusiones)
-        sin = len(videos) - con - excl
-        return {'con_cupones': con, 'sin_cupones': sin, 'excluidos': excl}
+        sin = len(videos) - len(con_cupones) - excl
+        actualizados = sum(1 for v in con_cupones if nuevo_bloque in v['snippet']['description'])
+        por_actualizar = len(con_cupones) - actualizados
+        return {
+            'con_cupones': len(con_cupones),
+            'sin_cupones': sin,
+            'excluidos': excl,
+            'actualizados': actualizados,
+            'por_actualizar': por_actualizar,
+        }
 
     while True:
         mostrar_menu(info_canal, len(videos), nuevo_bloque, calcular_stats(), cargar_estado_links())
