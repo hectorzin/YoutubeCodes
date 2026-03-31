@@ -751,7 +751,8 @@ def accion_comprobar_comentarios(youtube, videos, nuevo_bloque, patron, channel_
         console.print(f'  [dim]Coste de actualizar comentarios: [/dim][bold rgb(255,0,0)]~{coste} unidades[/bold rgb(255,0,0)]')
         console.print(f'  [link=https://console.cloud.google.com/apis/api/youtube.googleapis.com/quotas][blue]Ver cuota disponible en Google Cloud →[/blue][/link]')
         console.print()
-        if preguntar(f'¿Actualizar {len(sin_actualizar_lista)} comentario{"s" if len(sin_actualizar_lista) != 1 else ""}?'):
+        resp = console.input(f'  [dim]¿Actualizar {len(sin_actualizar_lista)} comentario{"s" if len(sin_actualizar_lista) != 1 else ""}? [s/n]: [/dim]').strip().lower()
+        if resp == 's':
             corregidos = 0
             for titulo, vid_id, comment_id in sin_actualizar_lista:
                 try:
