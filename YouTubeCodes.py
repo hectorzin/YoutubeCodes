@@ -352,7 +352,6 @@ def _imprimir_grupo(items, simbolo, estilo):
             console.print(f'\n  [bold]{item["video"]}[/bold]')
             console.print(f'  [dim]https://studio.youtube.com/video/{item["video_id"]}[/dim]')
         console.print(f'  [{estilo}]{simbolo}[/{estilo}] {item["linea"][:100]}')
-        console.print(f'    [dim]{item["url"]}[/dim]')
 
 
 def _escribir_grupo(f, items, simbolo):
@@ -363,7 +362,6 @@ def _escribir_grupo(f, items, simbolo):
             f.write(f'\n  Video: {item["video"]}\n')
             f.write(f'    https://studio.youtube.com/video/{item["video_id"]}\n')
         f.write(f'  {simbolo} {item["linea"]}\n')
-        f.write(f'       URL: {item["url"]}\n')
 
 
 def guardar_reporte_links(links_rotos, links_geo):
@@ -675,7 +673,7 @@ def dibujar_cabecera(info_canal, n_videos, nuevo_bloque, stats=None):
     if stats:
         con, sin, excl = stats['con_cupones'], stats['sin_cupones'], stats['excluidos']
         der.add_row(Text.assemble(('● ', 'green'), (f'{con} ', 'cyan'), ('con cupones', 'dim')))
-        der.add_row(Text.assemble(('● ', 'red'), (f'{sin} ', 'red' if sin else 'green'), ('sin cupones', 'dim')))
+        der.add_row(Text.assemble(('● ', 'red'), (f'{sin} ', 'red' if sin else 'green'), ('sin cupones ', 'dim'), ('✗' if sin else '✓', 'red' if sin else 'green')))
         if excl:
             der.add_row(Text.assemble(('● ', 'dark_orange'), (f'{excl} ', 'cyan'), ('excluidos', 'dim')))
     der.add_row('')
