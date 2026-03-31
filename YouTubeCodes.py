@@ -822,7 +822,7 @@ def dibujar_cabecera(info_canal, n_videos, nuevo_bloque, stats=None, estado_link
         izq.add_row(Text.assemble(('● ', 'green'), (f'{c_act} ', 'green'), ('actualizados', 'dim')))
         izq.add_row(Text.assemble(('● ', 'red' if c_sin_act else 'green'), (f'{c_sin_act} ', 'red' if c_sin_act else 'green'), ('sin actualizar', 'dim')))
         izq.add_row(Text.assemble(('● ', 'yellow' if c_sin_cup else 'green'), (f'{c_sin_cup} ', 'yellow' if c_sin_cup else 'green'), ('sin cupones en comentario', 'dim')))
-        izq.add_row(Text(f'  última comprobación: {estado_comentarios["fecha"]}', style='dim'))
+        izq.add_row(Text(f'  (último escaneo: {estado_comentarios["fecha"]})', style='dim'))
 
     # ── Columna derecha ────────────────────────────────────────────
     der = Table.grid(padding=(0, 0))
