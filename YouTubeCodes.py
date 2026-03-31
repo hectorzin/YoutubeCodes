@@ -473,7 +473,7 @@ def accion_actualizar_cupones(youtube, videos, nuevo_bloque, patron):
     lecturas = 1 + (len(videos) // 50 + 1) * 2
     coste = pendientes * 50 + lecturas
     console.print()
-    console.print(f'  [dim]Vídeos a modificar: [bold]{pendientes}[/bold]  ·  coste estimado: [bold]~{coste} unidades[/bold][/dim]')
+    console.print(f'  [dim]Vídeos a modificar: [bold]{pendientes}[/bold]  ·  coste estimado: [/dim][bold rgb(255,0,0)]~{coste} unidades[/bold rgb(255,0,0)]')
     console.print(f'  [link=https://console.cloud.google.com/apis/api/youtube.googleapis.com/quotas][blue]Ver cuota disponible en Google Cloud →[/blue][/link]')
     console.print()
     if not preguntar(f'¿Actualizar [bold]{pendientes}[/bold] vídeo{"s" if pendientes != 1 else ""}?'):
