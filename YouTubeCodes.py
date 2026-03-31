@@ -492,7 +492,24 @@ def accion_actualizar_cupones(youtube, videos, nuevo_bloque, patron):
         console.print()
 
 
-def accion_comprobar_links(videos):
+def reemplazar_link_en_videos(youtube, videos, url_vieja, url_nueva):
+    afectados = [v for v in videos if url_vieja in v['snippet']['description']]
+    if not afectados:
+        console.print('[yellow]No se encontró ese link en ningún vídeo.[/yellow]')
+        return
+    console.print(f'  {len(afectados)} vídeo(s) afectados. Actualizando...')
+    for video in afectados:
+        snippet = video['snippet']
+        nueva_desc = snippet['description'].replace(url_vieja, url_nueva)
+        youtube.videos().update(
+            part='snippet',
+            body={'id': video['id'], 'snippet': snippet | {'description': nueva_desc}}
+        ).execute()
+        snippet['description'] = nueva_desc  # actualizar en memoria
+        console.print(f'  [green]✓[/green] {snippet["title"]}')
+
+
+def accion_comprobar_links(youtube, videos):
     links_unicos = {
         url
         for v in videos
@@ -505,6 +522,32 @@ def accion_comprobar_links(videos):
         return
     links_rotos, links_geo = chequear_links_videos(videos)
     guardar_reporte_links(links_rotos, links_geo)
+
+    todos_problemas = links_rotos + links_geo
+    if not todos_problemas:
+        return
+
+    urls_unicas = list(dict.fromkeys(e['url'] for e in todos_problemas))
+    console.print('\n[bold]Links con problemas:[/bold]\n')
+    for i, url in enumerate(urls_unicas, 1):
+        console.print(f'  [bold]{i}.[/bold] {url}')
+
+    console.print()
+    while True:
+        resp = console.input('[dim]Número a reemplazar (o Enter para terminar): [/dim]').strip()
+        if not resp:
+            break
+        try:
+            idx = int(resp) - 1
+            if not 0 <= idx < len(urls_unicas):
+                raise ValueError
+        except ValueError:
+            console.print('[red]Número no válido.[/red]')
+            continue
+        url_vieja = urls_unicas[idx]
+        url_nueva = console.input(f'[dim]Nueva URL para reemplazar {url_vieja[:60]}...: [/dim]').strip()
+        if url_nueva:
+            reemplazar_link_en_videos(youtube, videos, url_vieja, url_nueva)
 
 
 def cargar_exclusiones():
@@ -735,7 +778,7 @@ def main():
         if opcion == OPT_CUPONES:
             accion_actualizar_cupones(youtube, videos, nuevo_bloque, patron)
         elif opcion == OPT_LINKS:
-            accion_comprobar_links(videos)
+            accion_comprobar_links(youtube, videos)
         elif opcion == OPT_SIN_CUP:
             accion_videos_sin_cupones(videos, patron)
 
