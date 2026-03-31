@@ -493,7 +493,7 @@ def accion_actualizar_cupones(youtube, videos, nuevo_bloque, patron):
                 sin_cambios += 1
             elif resultado == 'demasiado_larga':
                 omitidos += 1
-                omitidos_lista.append(titulo)
+                omitidos_lista.append((titulo, video['id']))
             progress.advance(task)
 
     console.print()
@@ -503,8 +503,9 @@ def accion_actualizar_cupones(youtube, videos, nuevo_bloque, patron):
     console.print(f'[green]✓[/green] Actualizados: [bold green]{actualizados}[/bold green]  ·  Sin cambios: {sin_cambios}', end='')
     if omitidos:
         console.print(f'  ·  [red]Omitidos por longitud: {omitidos}[/red]')
-        for t in omitidos_lista:
-            console.print(f'  [red]  · {t}[/red]')
+        for titulo, vid_id in omitidos_lista:
+            console.print(f'  [red]  · {titulo}[/red]')
+            console.print(f'    [link=https://studio.youtube.com/video/{vid_id}][blue]https://studio.youtube.com/video/{vid_id}[/blue][/link]')
     else:
         console.print()
 
