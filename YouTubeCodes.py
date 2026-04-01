@@ -72,6 +72,10 @@ CHROME_EXE = next((p for p in CHROME_RUTAS if os.path.exists(p)), None)
 CHROME_DEBUG_PORT = 9222
 
 
+def hay_terminal_interactiva():
+    return sys.stdin.isatty() and sys.stdout.isatty()
+
+
 def preguntar(mensaje):
     return Prompt.ask(mensaje, choices=['s', 'n'], default='n') == 's'
 
@@ -217,6 +221,8 @@ def iniciar_chrome():
             console.print(f'  [dim]{p}[/dim]')
         return False
 
+    os.makedirs(CHROME_USER_DATA, exist_ok=True)
+
     with console.status('Cerrando Chrome si está abierto...'):
         if sys.platform == 'win32':
             subprocess.run(['taskkill', '/F', '/IM', 'chrome.exe'],
@@ -233,7 +239,11 @@ def iniciar_chrome():
         f'--user-data-dir={CHROME_USER_DATA}',
         '--no-first-run',
         '--no-default-browser-check',
-    ])
+        '--disable-breakpad',
+        '--disable-crash-reporter',
+        '--disable-background-networking',
+    ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+       stdin=subprocess.DEVNULL, start_new_session=True)
 
     with console.status('Esperando a Chrome...'):
         for _ in range(20):
@@ -1116,6 +1126,12 @@ def mostrar_menu(info_canal, n_videos, nuevo_bloque, stats=None, estado_links=No
 
 
 def main():
+    if not hay_terminal_interactiva():
+        console.print('[red]ERROR: Esta app necesita una terminal interactiva.[/red]')
+        console.print('[yellow]Ábrela desde la terminal integrada y ejecútala ahí, no desde el panel Output/Code Runner/Task runner.[/yellow]')
+        console.print('[dim]Ejemplo: source .venv/bin/activate && python YouTubeCodes.py --offline[/dim]')
+        raise SystemExit(1)
+
     offline = '--offline' in sys.argv
 
     if not os.path.exists(CREDENTIALS_FILE) and not offline:
