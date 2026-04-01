@@ -31,6 +31,7 @@ REPORTE_LINKS_FILE = 'links_rotos.txt'
 LINKS_ESTADO_FILE       = 'links_estado.json'
 COMENTARIOS_ESTADO_FILE = 'comentarios_estado.json'
 EXCLUSIONES_FILE = 'exclusiones.txt'
+CACHE_VIDEOS_FILE = 'cache_videos.json'
 
 MESES_ES = {
     1: 'ENERO', 2: 'FEBRERO', 3: 'MARZO', 4: 'ABRIL',
@@ -40,6 +41,11 @@ MESES_ES = {
 
 PATRON_FECHA = r'[A-ZÁÉÍÓÚ]+\s+\d{4}'
 PATRON_URL = r'https?://[^\s\)\]>\"\']*aliexpress\.com[^\s\)\]>\"\']*'
+PATRON_URL_AMAZON = r'https?://(?:amzn\.to|amzn\.eu|www\.amazon\.[a-z.]+)/[^\s\)\]>\"\']*'
+
+HEADERS_REQUESTS = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+}
 
 if sys.platform == 'win32':
     CHROME_RUTAS = [
@@ -159,6 +165,32 @@ def obtener_todos_los_videos(youtube):
 
 def extraer_links_aliexpress(descripcion):
     return list(set(re.findall(PATRON_URL, descripcion)))
+
+
+def extraer_links_amazon(descripcion):
+    return list(set(re.findall(PATRON_URL_AMAZON, descripcion)))
+
+
+def comprobar_link_amazon_chrome(page, url):
+    """Comprobación a fondo: detecta productos sin stock via Chrome."""
+    try:
+        page.goto(url, wait_until='domcontentloaded', timeout=20000)
+        page.wait_for_timeout(2000)
+        texto = page.inner_text('body').lower()
+        if not page.title() or page.title() in ('amazon.es', 'amazon.com', 'amazon'):
+            return 'roto'
+        indicadores_sin_stock = [
+            'actualmente no disponible',
+            'currently unavailable',
+            'no disponible',
+            'ofertas destacadas no disponibles',
+            'no featured offers available',
+        ]
+        if any(ind in texto for ind in indicadores_sin_stock):
+            return 'sin_stock'
+        return 'ok'
+    except Exception:
+        return 'roto'
 
 
 def linea_con_link(descripcion, url):
@@ -383,6 +415,20 @@ def cargar_estado_comentarios():
         return json.load(f)
 
 
+def guardar_cache_videos(videos, info_canal):
+    with open(CACHE_VIDEOS_FILE, 'w', encoding='utf-8') as f:
+        json.dump({'videos': videos, 'info_canal': info_canal,
+                   'fecha': datetime.now().strftime('%d/%m/%Y %H:%M')}, f, ensure_ascii=False)
+
+
+def cargar_cache_videos():
+    if not os.path.exists(CACHE_VIDEOS_FILE):
+        return None, None, None
+    with open(CACHE_VIDEOS_FILE, 'r', encoding='utf-8') as f:
+        data = json.load(f)
+    return data['videos'], data['info_canal'], data.get('fecha', '?')
+
+
 def guardar_estado_comentarios(actualizados, sin_actualizar, sin_cupones):
     with open(COMENTARIOS_ESTADO_FILE, 'w', encoding='utf-8') as f:
         json.dump({
@@ -565,84 +611,161 @@ def reemplazar_link_en_comentarios(youtube, entradas, url_vieja, url_nueva):
 
 
 def accion_comprobar_links(youtube, videos, patron=None, channel_id=None):
-    links_desc_unicos = {
+    links_ali_unicos = {
         url for v in videos
         for url in extraer_links_aliexpress(v['snippet']['description'])
     }
-    n_desc = len(links_desc_unicos)
+    links_amz_unicos = {
+        url for v in videos
+        for url in extraer_links_amazon(v['snippet']['description'])
+    }
+    n_ali = len(links_ali_unicos)
+    n_amz = len(links_amz_unicos)
     videos_con_cupones = buscar_videos_con_cupones(videos, patron) if patron else []
     n_com = len(videos_con_cupones)
 
-    console.print(f'  Descripciones: [bold]{n_desc}[/bold] links únicos · coste: [dim]0 unidades[/dim]')
+    console.print(f'  Amazon:     [bold]{n_amz}[/bold] links únicos [dim](Chrome, detecta sin stock y sin opción de compra disponible)[/dim]')
+    console.print(f'  AliExpress: [bold]{n_ali}[/bold] links únicos [dim](Chrome, detecta links rotos o geo-restringidos)[/dim]')
     if videos_con_cupones:
-        console.print(f'  Comentarios: [bold]{n_com}[/bold] vídeos con cupones · coste: [bold rgb(255,0,0)]~{n_com} unidades[/bold rgb(255,0,0)]')
+        console.print(f'  Comentarios AliExpress: [bold]{n_com}[/bold] vídeos · coste: [bold rgb(255,0,0)]~{n_com} unidades[/bold rgb(255,0,0)]')
     console.print(f'  [link=https://console.cloud.google.com/apis/api/youtube.googleapis.com/quotas][blue]Ver cuota disponible →[/blue][/link]')
     console.print()
     console.print('[red]AVISO: Esto cerrará Chrome y lo abrirá en modo depuración.[/red]\n')
 
-    OPT_DESC   = 'Solo descripciones'
-    OPT_TODO   = f'Descripciones y comentarios (~{n_com} unidades extra)'
-    OPT_CANCEL = 'Cancelar'
-    choices = [OPT_DESC]
-    if videos_con_cupones:
-        choices.append(OPT_TODO)
-    choices.append(OPT_CANCEL)
+    OPT_AMZ      = f'Amazon ({n_amz} links)'
+    OPT_ALI_DESC = f'AliExpress descripciones ({n_ali} links)'
+    OPT_ALI_TODO = f'AliExpress descripciones + comentarios (~{n_com} unidades extra)'
+    OPT_AMBOS    = f'Amazon + AliExpress descripciones'
+    OPT_AMBOS_COM= f'Amazon + AliExpress descripciones + comentarios (~{n_com} unidades extra)'
+    OPT_CANCEL   = 'Cancelar'
 
-    opcion = questionary.select('¿Qué revisar?', choices=choices, use_shortcuts=False).ask()
-    if opcion is None or opcion == OPT_CANCEL:
+    opciones_disponibles = []
+    if n_amz:
+        opciones_disponibles.append(OPT_AMZ)
+    if n_ali:
+        opciones_disponibles.append(OPT_ALI_DESC)
+        if videos_con_cupones:
+            opciones_disponibles.append(OPT_ALI_TODO)
+    if n_amz and n_ali:
+        opciones_disponibles.append(OPT_AMBOS)
+        if videos_con_cupones:
+            opciones_disponibles.append(OPT_AMBOS_COM)
+    opciones_disponibles.append(OPT_CANCEL)
+
+    seleccion = questionary.select('¿Qué quieres comprobar?', choices=opciones_disponibles, use_shortcuts=False).ask()
+    if seleccion is None or seleccion == OPT_CANCEL:
         console.print('[yellow]Cancelado.[/yellow]')
         return
 
-    incluir_comentarios = opcion == OPT_TODO
+    hacer_amz           = seleccion in (OPT_AMZ, OPT_AMBOS, OPT_AMBOS_COM)
+    hacer_ali           = seleccion in (OPT_ALI_DESC, OPT_ALI_TODO, OPT_AMBOS, OPT_AMBOS_COM)
+    incluir_comentarios = seleccion in (OPT_ALI_TODO, OPT_AMBOS_COM)
 
-    # Construir entradas de descripciones
+    # ── Amazon (Chrome) ───────────────────────────────────────────────────────
+    links_amazon_rotos = []
+
+    if hacer_amz and n_amz:
+        video_links_amz = []
+        for video in videos:
+            descripcion = video['snippet']['description']
+            links = extraer_links_amazon(descripcion)
+            if links:
+                pares = [('descripcion', url, linea_con_link(descripcion, url), None, None) for url in links]
+                video_links_amz.append((video, pares))
+
+        if iniciar_chrome():
+            playwright_amz = sync_playwright().start()
+            try:
+                browser_amz = playwright_amz.chromium.connect_over_cdp(f'http://127.0.0.1:{CHROME_DEBUG_PORT}')
+                page_amz = browser_amz.contexts[0].new_page()
+                cache_amz = {}
+                with Progress(
+                    SpinnerColumn(),
+                    TextColumn('[progress.description]{task.description}'),
+                    BarColumn(),
+                    MofNCompleteColumn(),
+                    TextColumn('[dim]{task.fields[url]}[/dim]'),
+                    console=console,
+                ) as progress:
+                    task = progress.add_task('Comprobando Amazon', total=n_amz, url='')
+                    for url in links_amz_unicos:
+                        progress.update(task, url=url[:70])
+                        cache_amz[url] = comprobar_link_amazon_chrome(page_amz, url)
+                        progress.advance(task)
+                page_amz.close()
+                playwright_amz.stop()
+                cerrar_chrome()
+                for video, pares in video_links_amz:
+                    for tipo, url, linea, comment_id, texto_completo in pares:
+                        estado = cache_amz.get(url, 'ok')
+                        if estado in ('roto', 'sin_stock'):
+                            links_amazon_rotos.append({
+                                'video': video['snippet']['title'], 'video_id': video['id'],
+                                'url': url, 'linea': linea,
+                                'tipo': tipo, 'comment_id': comment_id, 'texto_completo': texto_completo,
+                                'tienda': 'amazon',
+                                'estado_detalle': 'sin_stock' if estado == 'sin_stock' else None,
+                            })
+            except Exception as e:
+                console.print(f'[red]Error comprobando Amazon: {e}[/red]')
+                playwright_amz.stop()
+                cerrar_chrome()
+
+    # ── AliExpress (Chrome) ───────────────────────────────────────────────────
+    links_rotos_ali, links_geo_ali = [], []
     video_links = []
-    for video in videos:
-        descripcion = video['snippet']['description']
-        links = extraer_links_aliexpress(descripcion)
-        if links:
-            pares = [('descripcion', url, linea_con_link(descripcion, url), None, None) for url in links]
-            video_links.append((video, pares))
 
-    # Construir entradas de comentarios si se pidió
-    if incluir_comentarios:
-        with Progress(
-            SpinnerColumn(),
-            TextColumn('[progress.description]{task.description}'),
-            BarColumn(),
-            MofNCompleteColumn(),
-            TextColumn('[dim]{task.fields[titulo]}[/dim]'),
-            console=console,
-        ) as progress:
-            task = progress.add_task('Obteniendo comentarios', total=n_com, titulo='')
-            for video in videos_con_cupones:
-                progress.update(task, titulo=video['snippet']['title'][:60])
-                try:
-                    resp = youtube.commentThreads().list(
-                        part='snippet', videoId=video['id'],
-                        maxResults=1, order='relevance',
-                    ).execute()
-                    items = resp.get('items', [])
-                    if items:
-                        thread = items[0]
-                        top = thread['snippet']['topLevelComment']['snippet']
-                        if top.get('authorChannelId', {}).get('value', '') == channel_id:
-                            texto = top.get('textOriginal', '') or top.get('textDisplay', '')
-                            comment_id = thread['snippet']['topLevelComment']['id']
-                            links_com = extraer_links_aliexpress(texto)
-                            if links_com:
-                                pares = [('comentario', url, linea_con_link(texto, url), comment_id, texto)
-                                         for url in links_com]
-                                video_links.append((video, pares))
-                except Exception:
-                    pass
-                progress.advance(task)
+    if hacer_ali:
+        for video in videos:
+            descripcion = video['snippet']['description']
+            links = extraer_links_aliexpress(descripcion)
+            if links:
+                pares = [('descripcion', url, linea_con_link(descripcion, url), None, None) for url in links]
+                video_links.append((video, pares))
 
-    if not video_links:
-        console.print('[yellow]No se encontraron links de AliExpress.[/yellow]')
-        return
+        if incluir_comentarios:
+            with Progress(
+                SpinnerColumn(),
+                TextColumn('[progress.description]{task.description}'),
+                BarColumn(),
+                MofNCompleteColumn(),
+                TextColumn('[dim]{task.fields[titulo]}[/dim]'),
+                console=console,
+            ) as progress:
+                task = progress.add_task('Obteniendo comentarios', total=n_com, titulo='')
+                for video in videos_con_cupones:
+                    progress.update(task, titulo=video['snippet']['title'][:60])
+                    try:
+                        resp = youtube.commentThreads().list(
+                            part='snippet', videoId=video['id'],
+                            maxResults=1, order='relevance',
+                        ).execute()
+                        items = resp.get('items', [])
+                        if items:
+                            thread = items[0]
+                            top = thread['snippet']['topLevelComment']['snippet']
+                            if top.get('authorChannelId', {}).get('value', '') == channel_id:
+                                texto = top.get('textOriginal', '') or top.get('textDisplay', '')
+                                comment_id = thread['snippet']['topLevelComment']['id']
+                                links_com = extraer_links_aliexpress(texto)
+                                if links_com:
+                                    pares = [('comentario', url, linea_con_link(texto, url), comment_id, texto)
+                                             for url in links_com]
+                                    video_links.append((video, pares))
+                    except Exception:
+                        pass
+                    progress.advance(task)
 
-    links_rotos, links_geo = chequear_links_videos(video_links)
+        if video_links:
+            links_rotos_ali, links_geo_ali = chequear_links_videos(video_links)
+
+    # ── Combinar y guardar ────────────────────────────────────────────────────
+    for e in links_rotos_ali + links_geo_ali:
+        e.setdefault('tienda', 'aliexpress')
+
+    links_rotos = links_amazon_rotos + links_rotos_ali
+    links_geo   = links_geo_ali
+
     guardar_reporte_links(links_rotos, links_geo)
 
     todos_problemas = links_rotos + links_geo
@@ -652,11 +775,13 @@ def accion_comprobar_links(youtube, videos, patron=None, channel_id=None):
     urls_unicas = list(dict.fromkeys(e['url'] for e in todos_problemas))
     console.print('\n[bold]Links con problemas:[/bold]\n')
     for i, url in enumerate(urls_unicas, 1):
-        console.print(f'  [bold]{i}.[/bold] {url}')
+        tienda_sym = '🛒' if any(e.get('tienda') == 'amazon' and e['url'] == url for e in todos_problemas) else '🛍'
+        console.print(f'  [bold]{i}.[/bold] {tienda_sym} {url}')
         for e in todos_problemas:
             if e['url'] == url:
                 tipo_sym = '📝' if e['tipo'] == 'descripcion' else '💬'
-                console.print(f'     [dim]{tipo_sym} {e["video"]}[/dim]')
+                detalle = ' [yellow](sin stock)[/yellow]' if e.get('estado_detalle') == 'sin_stock' else ''
+                console.print(f'     [dim]{tipo_sym} {e["video"]}[/dim]{detalle}')
 
     console.print()
     while True:
@@ -988,14 +1113,18 @@ def dibujar_cabecera(info_canal, n_videos, nuevo_bloque, stats=None, estado_link
     ))
 
 
-def mostrar_menu(info_canal, n_videos, nuevo_bloque, stats=None, estado_links=None, estado_comentarios=None):
+def mostrar_menu(info_canal, n_videos, nuevo_bloque, stats=None, estado_links=None, estado_comentarios=None, offline=False):
     console.clear()
     dibujar_cabecera(info_canal, n_videos, nuevo_bloque, stats, estado_links, estado_comentarios)
+    if offline:
+        console.print('[bold red]⚠  MODO OFFLINE — los datos son del caché local, no de YouTube en tiempo real[/bold red]')
     console.print()
 
 
 def main():
-    if not os.path.exists(CREDENTIALS_FILE):
+    offline = '--offline' in sys.argv
+
+    if not os.path.exists(CREDENTIALS_FILE) and not offline:
         console.print(f'[red]ERROR: No se encontró el archivo "{CREDENTIALS_FILE}"[/red]')
         console.print('Renombra tu archivo de credenciales a "client_secret.json" y ponlo en esta carpeta.')
         return
@@ -1017,17 +1146,28 @@ def main():
     console.print('  [bold cyan]◆ YouTubeCodes[/bold cyan]  [dim]Gestor de cupones de AliExpress[/dim]')
     console.rule(style='bright_black')
     console.print()
-    console.print('[bold]Autenticando con YouTube...[/bold]')
-    youtube = autenticar()
-    console.print('[green]✓[/green] Autenticación correcta\n')
 
-    with console.status('[bold]Obteniendo lista de vídeos del canal...[/bold]'):
-        videos = obtener_todos_los_videos(youtube)
-        info_canal = obtener_info_canal(youtube)
-    console.print(f'[green]✓[/green] [bold]{len(videos)}[/bold] vídeos en el canal')
+    youtube = None
+    if offline:
+        videos, info_canal, fecha_cache = cargar_cache_videos()
+        if not videos:
+            console.print('[red]ERROR: No hay caché de vídeos. Ejecuta primero sin --offline.[/red]')
+            return
+        console.print(f'[yellow]Modo offline[/yellow] — usando caché del {fecha_cache} ([bold]{len(videos)}[/bold] vídeos)')
+        console.print('[dim]Las acciones que modifiquen YouTube no estarán disponibles.[/dim]\n')
+    else:
+        console.print('[bold]Autenticando con YouTube...[/bold]')
+        youtube = autenticar()
+        console.print('[green]✓[/green] Autenticación correcta\n')
+
+        with console.status('[bold]Obteniendo lista de vídeos del canal...[/bold]'):
+            videos = obtener_todos_los_videos(youtube)
+            info_canal = obtener_info_canal(youtube)
+        guardar_cache_videos(videos, info_canal)
+        console.print(f'[green]✓[/green] [bold]{len(videos)}[/bold] vídeos en el canal')
 
     OPT_CUPONES      = 'Actualizar cupones en las descripciones'
-    OPT_LINKS        = 'Comprobar links de AliExpress'
+    OPT_LINKS        = 'Comprobar links de AliExpress y Amazon'
     OPT_SIN_CUP      = 'Ver vídeos sin bloque de cupones'
     OPT_COMENTARIOS  = 'Comprobar comentarios fijados con cupones'
     OPT_RESCAN       = 'Recargar vídeos del canal'
@@ -1043,7 +1183,8 @@ def main():
         if nuevo_bloque:
             ops.append(OPT_SIN_CUP)
             ops.append(OPT_COMENTARIOS)
-        ops.append(OPT_RESCAN)
+        if not offline:
+            ops.append(OPT_RESCAN)
         ops.append(OPT_SALIR)
         return ops
 
@@ -1066,7 +1207,7 @@ def main():
 
     while True:
         mostrar_menu(info_canal, len(videos), nuevo_bloque, calcular_stats(),
-                     cargar_estado_links(), cargar_estado_comentarios())
+                     cargar_estado_links(), cargar_estado_comentarios(), offline)
         opcion = questionary.select(
             'Elige una opción:',
             choices=build_opciones(),
