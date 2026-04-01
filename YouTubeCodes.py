@@ -266,17 +266,8 @@ def comprobar_link_chrome(page, url):
         return 'roto'
 
 
-def chequear_links_videos(videos):
-    # Recopilar links por video
-    video_links = []
-    for video in videos:
-        descripcion = video['snippet']['description']
-        links = extraer_links_aliexpress(descripcion)
-        if not links:
-            continue
-        pares = [(url, linea_con_link(descripcion, url)) for url in links]
-        video_links.append((video, pares))
-
+def chequear_links_videos(video_links):
+    """video_links: [(video, [(tipo, url, linea, comment_id, texto_completo), ...]), ...]"""
     if not video_links:
         console.print('[yellow]No se encontraron links de AliExpress.[/yellow]')
         return [], []
@@ -307,7 +298,7 @@ def chequear_links_videos(videos):
     seen = set()
     urls_orden = []
     for _, pares in video_links:
-        for url, _ in pares:
+        for tipo, url, linea, comment_id, texto_completo in pares:
             if url not in seen:
                 seen.add(url)
                 urls_orden.append(url)
@@ -333,8 +324,9 @@ def chequear_links_videos(videos):
     for video, pares in video_links:
         titulo = video['snippet']['title']
         vid_id = video['id']
-        for url, linea in pares:
-            entrada = {'video': titulo, 'video_id': vid_id, 'url': url, 'linea': linea}
+        for tipo, url, linea, comment_id, texto_completo in pares:
+            entrada = {'video': titulo, 'video_id': vid_id, 'url': url, 'linea': linea,
+                       'tipo': tipo, 'comment_id': comment_id, 'texto_completo': texto_completo}
             if cache[url] == 'roto':
                 links_rotos.append(entrada)
             elif cache[url] == 'geo':
@@ -353,7 +345,8 @@ def _imprimir_grupo(items, simbolo, estilo):
             video_actual = item['video']
             console.print(f'\n  [bold]{item["video"]}[/bold]')
             console.print(f'  [dim]https://studio.youtube.com/video/{item["video_id"]}[/dim]')
-        console.print(f'  [{estilo}]{simbolo}[/{estilo}] {item["linea"][:100]}')
+        tipo_sym = '📝' if item.get('tipo') == 'descripcion' else '💬'
+        console.print(f'  [{estilo}]{simbolo}[/{estilo}] {tipo_sym} {item["linea"][:100]}')
 
 
 def _escribir_grupo(f, items, simbolo):
@@ -363,7 +356,8 @@ def _escribir_grupo(f, items, simbolo):
             video_actual = item['video']
             f.write(f'\n  Video: {item["video"]}\n')
             f.write(f'    https://studio.youtube.com/video/{item["video_id"]}\n')
-        f.write(f'  {simbolo} {item["linea"]}\n')
+        tipo_sym = '📝' if item.get('tipo') == 'descripcion' else '💬'
+        f.write(f'  {simbolo} {tipo_sym} {item["linea"]}\n')
 
 
 def cargar_estado_links():
@@ -543,9 +537,8 @@ def accion_actualizar_cupones(youtube, videos, nuevo_bloque, patron):
 def reemplazar_link_en_videos(youtube, videos, url_vieja, url_nueva):
     afectados = [v for v in videos if url_vieja in v['snippet']['description']]
     if not afectados:
-        console.print('[yellow]No se encontró ese link en ningún vídeo.[/yellow]')
         return
-    console.print(f'  {len(afectados)} vídeo(s) afectados. Actualizando...')
+    console.print(f'  {len(afectados)} descripción(es) afectadas. Actualizando...')
     for video in afectados:
         snippet = video['snippet']
         nueva_desc = snippet['description'].replace(url_vieja, url_nueva)
@@ -553,22 +546,103 @@ def reemplazar_link_en_videos(youtube, videos, url_vieja, url_nueva):
             part='snippet',
             body={'id': video['id'], 'snippet': snippet | {'description': nueva_desc}}
         ).execute()
-        snippet['description'] = nueva_desc  # actualizar en memoria
-        console.print(f'  [green]✓[/green] {snippet["title"]}')
+        snippet['description'] = nueva_desc
+        console.print(f'  [green]✓[/green] 📝 {snippet["title"]}')
 
 
-def accion_comprobar_links(youtube, videos):
-    links_unicos = {
-        url
-        for v in videos
+def reemplazar_link_en_comentarios(youtube, entradas, url_vieja, url_nueva):
+    console.print(f'  {len(entradas)} comentario(s) afectados. Actualizando...')
+    for entry in entradas:
+        texto_nuevo = entry['texto_completo'].replace(url_vieja, url_nueva)
+        try:
+            youtube.comments().update(
+                part='snippet',
+                body={'id': entry['comment_id'], 'snippet': {'textOriginal': texto_nuevo}}
+            ).execute()
+            console.print(f'  [green]✓[/green] 💬 {entry["video"]}')
+        except Exception as e:
+            console.print(f'  [red]✗[/red] 💬 {entry["video"]}: {e}')
+
+
+def accion_comprobar_links(youtube, videos, patron=None, channel_id=None):
+    links_desc_unicos = {
+        url for v in videos
         for url in extraer_links_aliexpress(v['snippet']['description'])
     }
-    console.print(f'[bold]{len(links_unicos)}[/bold] links únicos de AliExpress encontrados.')
+    n_desc = len(links_desc_unicos)
+    videos_con_cupones = buscar_videos_con_cupones(videos, patron) if patron else []
+    n_com = len(videos_con_cupones)
+
+    console.print(f'  Descripciones: [bold]{n_desc}[/bold] links únicos · coste: [dim]0 unidades[/dim]')
+    if videos_con_cupones:
+        console.print(f'  Comentarios: [bold]{n_com}[/bold] vídeos con cupones · coste: [bold rgb(255,0,0)]~{n_com} unidades[/bold rgb(255,0,0)]')
+    console.print(f'  [link=https://console.cloud.google.com/apis/api/youtube.googleapis.com/quotas][blue]Ver cuota disponible →[/blue][/link]')
+    console.print()
     console.print('[red]AVISO: Esto cerrará Chrome y lo abrirá en modo depuración.[/red]\n')
-    if not preguntar('¿Comprobar si están activos?'):
+
+    OPT_DESC   = 'Solo descripciones'
+    OPT_TODO   = f'Descripciones y comentarios (~{n_com} unidades extra)'
+    OPT_CANCEL = 'Cancelar'
+    choices = [OPT_DESC]
+    if videos_con_cupones:
+        choices.append(OPT_TODO)
+    choices.append(OPT_CANCEL)
+
+    opcion = questionary.select('¿Qué revisar?', choices=choices, use_shortcuts=False).ask()
+    if opcion is None or opcion == OPT_CANCEL:
         console.print('[yellow]Cancelado.[/yellow]')
         return
-    links_rotos, links_geo = chequear_links_videos(videos)
+
+    incluir_comentarios = opcion == OPT_TODO
+
+    # Construir entradas de descripciones
+    video_links = []
+    for video in videos:
+        descripcion = video['snippet']['description']
+        links = extraer_links_aliexpress(descripcion)
+        if links:
+            pares = [('descripcion', url, linea_con_link(descripcion, url), None, None) for url in links]
+            video_links.append((video, pares))
+
+    # Construir entradas de comentarios si se pidió
+    if incluir_comentarios:
+        with Progress(
+            SpinnerColumn(),
+            TextColumn('[progress.description]{task.description}'),
+            BarColumn(),
+            MofNCompleteColumn(),
+            TextColumn('[dim]{task.fields[titulo]}[/dim]'),
+            console=console,
+        ) as progress:
+            task = progress.add_task('Obteniendo comentarios', total=n_com, titulo='')
+            for video in videos_con_cupones:
+                progress.update(task, titulo=video['snippet']['title'][:60])
+                try:
+                    resp = youtube.commentThreads().list(
+                        part='snippet', videoId=video['id'],
+                        maxResults=1, order='relevance',
+                    ).execute()
+                    items = resp.get('items', [])
+                    if items:
+                        thread = items[0]
+                        top = thread['snippet']['topLevelComment']['snippet']
+                        if top.get('authorChannelId', {}).get('value', '') == channel_id:
+                            texto = top.get('textOriginal', '') or top.get('textDisplay', '')
+                            comment_id = thread['snippet']['topLevelComment']['id']
+                            links_com = extraer_links_aliexpress(texto)
+                            if links_com:
+                                pares = [('comentario', url, linea_con_link(texto, url), comment_id, texto)
+                                         for url in links_com]
+                                video_links.append((video, pares))
+                except Exception:
+                    pass
+                progress.advance(task)
+
+    if not video_links:
+        console.print('[yellow]No se encontraron links de AliExpress.[/yellow]')
+        return
+
+    links_rotos, links_geo = chequear_links_videos(video_links)
     guardar_reporte_links(links_rotos, links_geo)
 
     todos_problemas = links_rotos + links_geo
@@ -581,7 +655,8 @@ def accion_comprobar_links(youtube, videos):
         console.print(f'  [bold]{i}.[/bold] {url}')
         for e in todos_problemas:
             if e['url'] == url:
-                console.print(f'     [dim]· {e["video"]}[/dim]')
+                tipo_sym = '📝' if e['tipo'] == 'descripcion' else '💬'
+                console.print(f'     [dim]{tipo_sym} {e["video"]}[/dim]')
 
     console.print()
     while True:
@@ -596,9 +671,16 @@ def accion_comprobar_links(youtube, videos):
             console.print('[red]Número no válido.[/red]')
             continue
         url_vieja = urls_unicas[idx]
-        url_nueva = console.input(f'[dim]Nueva URL para reemplazar {url_vieja[:60]}...: [/dim]').strip()
-        if url_nueva:
+        url_nueva = console.input(f'[dim]Nueva URL para {url_vieja[:60]}...: [/dim]').strip()
+        if not url_nueva:
+            continue
+        entradas_url = [e for e in todos_problemas if e['url'] == url_vieja]
+        entradas_desc = [e for e in entradas_url if e['tipo'] == 'descripcion']
+        entradas_com  = [e for e in entradas_url if e['tipo'] == 'comentario']
+        if entradas_desc:
             reemplazar_link_en_videos(youtube, videos, url_vieja, url_nueva)
+        if entradas_com:
+            reemplazar_link_en_comentarios(youtube, entradas_com, url_vieja, url_nueva)
 
 
 def cargar_exclusiones():
@@ -754,19 +836,30 @@ def accion_comprobar_comentarios(youtube, videos, nuevo_bloque, patron, channel_
         resp = console.input(f'  [dim]¿Actualizar {len(sin_actualizar_lista)} comentario{"s" if len(sin_actualizar_lista) != 1 else ""}? [s/n]: [/dim]').strip().lower()
         if resp == 's':
             corregidos = 0
-            for titulo, vid_id, comment_id in sin_actualizar_lista:
-                try:
-                    youtube.comments().update(
-                        part='snippet',
-                        body={
-                            'id': comment_id,
-                            'snippet': {'textOriginal': nuevo_bloque},
-                        }
-                    ).execute()
-                    console.print(f'  [green]✓[/green] {titulo}')
-                    corregidos += 1
-                except Exception as e:
-                    console.print(f'  [red]✗[/red] {titulo}: {e}')
+            n_act = len(sin_actualizar_lista)
+            with Progress(
+                SpinnerColumn(),
+                TextColumn('[progress.description]{task.description}'),
+                BarColumn(),
+                MofNCompleteColumn(),
+                TextColumn('[dim]{task.fields[titulo]}[/dim]'),
+                console=console,
+            ) as progress:
+                task = progress.add_task('Actualizando comentarios', total=n_act, titulo='')
+                for titulo, vid_id, comment_id in sin_actualizar_lista:
+                    progress.update(task, titulo=titulo[:60])
+                    try:
+                        youtube.comments().update(
+                            part='snippet',
+                            body={
+                                'id': comment_id,
+                                'snippet': {'textOriginal': nuevo_bloque},
+                            }
+                        ).execute()
+                        corregidos += 1
+                    except Exception as e:
+                        console.print(f'  [red]✗[/red] {titulo}: {e}')
+                    progress.advance(task)
             guardar_estado_comentarios(actualizados + corregidos, sin_actualizar - corregidos, sin_cupones_count)
 
 
@@ -994,7 +1087,7 @@ def main():
         if opcion == OPT_CUPONES:
             accion_actualizar_cupones(youtube, videos, nuevo_bloque, patron)
         elif opcion == OPT_LINKS:
-            accion_comprobar_links(youtube, videos)
+            accion_comprobar_links(youtube, videos, patron, channel_id)
         elif opcion == OPT_SIN_CUP:
             accion_videos_sin_cupones(videos, patron)
         elif opcion == OPT_COMENTARIOS:
