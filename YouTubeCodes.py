@@ -172,23 +172,23 @@ def extraer_links_amazon(descripcion):
 
 
 def comprobar_link_amazon_chrome(page, url):
-    """Comprobación a fondo: detecta productos sin stock via Chrome."""
+    """Comprobación via Chrome: ok si hay botón de compra, si no → sin_stock."""
     try:
         page.goto(url, wait_until='domcontentloaded', timeout=20000)
         page.wait_for_timeout(2000)
         texto = page.inner_text('body').lower()
         if not page.title() or page.title() in ('amazon.es', 'amazon.com', 'amazon'):
             return 'roto'
-        indicadores_sin_stock = [
-            'actualmente no disponible',
-            'currently unavailable',
-            'no disponible',
-            'ofertas destacadas no disponibles',
-            'no featured offers available',
+        indicadores_comprable = [
+            'añadir a la cesta',
+            'comprar ahora',
+            'add to cart',
+            'add to basket',
+            'buy now',
         ]
-        if any(ind in texto for ind in indicadores_sin_stock):
-            return 'sin_stock'
-        return 'ok'
+        if any(ind in texto for ind in indicadores_comprable):
+            return 'ok'
+        return 'sin_stock'
     except Exception:
         return 'roto'
 
@@ -532,7 +532,7 @@ def accion_actualizar_cupones(youtube, videos, nuevo_bloque, patron):
     coste = pendientes * 50 + lecturas
     console.print()
     console.print(f'  [dim]Vídeos a modificar: [bold]{pendientes}[/bold]  ·  coste estimado: [/dim][bold rgb(255,0,0)]~{coste} unidades[/bold rgb(255,0,0)]')
-    console.print(f'  [link=https://console.cloud.google.com/apis/api/youtube.googleapis.com/quotas][blue]Ver cuota disponible en Google Cloud →[/blue][/link]')
+    console.print(f'  📊 [link=https://console.cloud.google.com/apis/api/youtube.googleapis.com/quotas][bold cyan]Ver cuota disponible en Google Cloud ↗[/bold cyan][/link]')
     console.print()
     if not preguntar(f'¿Actualizar [bold]{pendientes}[/bold] vídeo{"s" if pendientes != 1 else ""}?'):
         console.print('[yellow]Cancelado.[/yellow]')
@@ -610,7 +610,7 @@ def reemplazar_link_en_comentarios(youtube, entradas, url_vieja, url_nueva):
             console.print(f'  [red]✗[/red] 💬 {entry["video"]}: {e}')
 
 
-def accion_comprobar_links(youtube, videos, patron=None, channel_id=None):
+def accion_comprobar_links(youtube, videos, channel_id=None):
     links_ali_unicos = {
         url for v in videos
         for url in extraer_links_aliexpress(v['snippet']['description'])
@@ -621,45 +621,39 @@ def accion_comprobar_links(youtube, videos, patron=None, channel_id=None):
     }
     n_ali = len(links_ali_unicos)
     n_amz = len(links_amz_unicos)
-    videos_con_cupones = buscar_videos_con_cupones(videos, patron) if patron else []
-    n_com = len(videos_con_cupones)
+    n_com = len(videos)
 
     console.print(f'  Amazon:     [bold]{n_amz}[/bold] links únicos [dim](Chrome, detecta sin stock y sin opción de compra disponible)[/dim]')
     console.print(f'  AliExpress: [bold]{n_ali}[/bold] links únicos [dim](Chrome, detecta links rotos o geo-restringidos)[/dim]')
-    if videos_con_cupones:
-        console.print(f'  Comentarios AliExpress: [bold]{n_com}[/bold] vídeos · coste: [bold rgb(255,0,0)]~{n_com} unidades[/bold rgb(255,0,0)]')
-    console.print(f'  [link=https://console.cloud.google.com/apis/api/youtube.googleapis.com/quotas][blue]Ver cuota disponible →[/blue][/link]')
+    console.print(f'  Comentarios: [bold]{n_com}[/bold] vídeos a escanear · coste: [bold rgb(255,0,0)]~{n_com} unidades[/bold rgb(255,0,0)]')
+    console.print(f'  📊 [link=https://console.cloud.google.com/apis/api/youtube.googleapis.com/quotas][bold cyan]Ver cuota disponible en Google Cloud ↗[/bold cyan][/link]')
     console.print()
     console.print('[red]AVISO: Esto cerrará Chrome y lo abrirá en modo depuración.[/red]\n')
 
-    OPT_AMZ      = f'Amazon ({n_amz} links)'
-    OPT_ALI_DESC = f'AliExpress descripciones ({n_ali} links)'
-    OPT_ALI_TODO = f'AliExpress descripciones + comentarios (~{n_com} unidades extra)'
-    OPT_AMBOS    = f'Amazon + AliExpress descripciones'
-    OPT_AMBOS_COM= f'Amazon + AliExpress descripciones + comentarios (~{n_com} unidades extra)'
-    OPT_CANCEL   = 'Cancelar'
+    OPT_AMZ  = f'Amazon ({n_amz} links)'
+    OPT_ALI  = f'AliExpress ({n_ali} links)'
+    OPT_COM  = f'Comentarios fijados (~{n_com} unidades extra)'
 
     opciones_disponibles = []
     if n_amz:
         opciones_disponibles.append(OPT_AMZ)
     if n_ali:
-        opciones_disponibles.append(OPT_ALI_DESC)
-        if videos_con_cupones:
-            opciones_disponibles.append(OPT_ALI_TODO)
-    if n_amz and n_ali:
-        opciones_disponibles.append(OPT_AMBOS)
-        if videos_con_cupones:
-            opciones_disponibles.append(OPT_AMBOS_COM)
-    opciones_disponibles.append(OPT_CANCEL)
+        opciones_disponibles.append(OPT_ALI)
+    if videos:
+        opciones_disponibles.append(OPT_COM)
 
-    seleccion = questionary.select('¿Qué quieres comprobar?', choices=opciones_disponibles, use_shortcuts=False).ask()
-    if seleccion is None or seleccion == OPT_CANCEL:
+    if not opciones_disponibles:
+        console.print('[yellow]No hay links que comprobar.[/yellow]')
+        return
+
+    seleccion = questionary.checkbox('¿Qué quieres comprobar?', choices=opciones_disponibles).ask()
+    if not seleccion:
         console.print('[yellow]Cancelado.[/yellow]')
         return
 
-    hacer_amz           = seleccion in (OPT_AMZ, OPT_AMBOS, OPT_AMBOS_COM)
-    hacer_ali           = seleccion in (OPT_ALI_DESC, OPT_ALI_TODO, OPT_AMBOS, OPT_AMBOS_COM)
-    incluir_comentarios = seleccion in (OPT_ALI_TODO, OPT_AMBOS_COM)
+    hacer_amz           = OPT_AMZ in seleccion
+    hacer_ali           = OPT_ALI in seleccion
+    incluir_comentarios = OPT_COM in seleccion
 
     # ── Amazon (Chrome) ───────────────────────────────────────────────────────
     links_amazon_rotos = []
@@ -733,7 +727,7 @@ def accion_comprobar_links(youtube, videos, patron=None, channel_id=None):
                 console=console,
             ) as progress:
                 task = progress.add_task('Obteniendo comentarios', total=n_com, titulo='')
-                for video in videos_con_cupones:
+                for video in videos:
                     progress.update(task, titulo=video['snippet']['title'][:60])
                     try:
                         resp = youtube.commentThreads().list(
@@ -875,7 +869,7 @@ def accion_comprobar_comentarios(youtube, videos, nuevo_bloque, patron, channel_
 
     n = len(videos_con_cupones)
     console.print(f'[bold]{n}[/bold] vídeos con cupones. Coste estimado: [bold rgb(255,0,0)]~{n} unidades[/bold rgb(255,0,0)]')
-    console.print(f'  [link=https://console.cloud.google.com/apis/api/youtube.googleapis.com/quotas][blue]Ver cuota disponible en Google Cloud →[/blue][/link]')
+    console.print(f'  📊 [link=https://console.cloud.google.com/apis/api/youtube.googleapis.com/quotas][bold cyan]Ver cuota disponible en Google Cloud ↗[/bold cyan][/link]')
     console.print()
     if not preguntar(f'¿Comprobar comentarios fijados de {n} vídeo{"s" if n != 1 else ""}?'):
         console.print('[yellow]Cancelado.[/yellow]')
@@ -956,7 +950,7 @@ def accion_comprobar_comentarios(youtube, videos, nuevo_bloque, patron, channel_
         console.print()
         coste = len(sin_actualizar_lista) * 50
         console.print(f'  [dim]Coste de actualizar comentarios: [/dim][bold rgb(255,0,0)]~{coste} unidades[/bold rgb(255,0,0)]')
-        console.print(f'  [link=https://console.cloud.google.com/apis/api/youtube.googleapis.com/quotas][blue]Ver cuota disponible en Google Cloud →[/blue][/link]')
+        console.print(f'  📊 [link=https://console.cloud.google.com/apis/api/youtube.googleapis.com/quotas][bold cyan]Ver cuota disponible en Google Cloud ↗[/bold cyan][/link]')
         console.print()
         resp = console.input(f'  [dim]¿Actualizar {len(sin_actualizar_lista)} comentario{"s" if len(sin_actualizar_lista) != 1 else ""}? [s/n]: [/dim]').strip().lower()
         if resp == 's':
@@ -1228,7 +1222,7 @@ def main():
         if opcion == OPT_CUPONES:
             accion_actualizar_cupones(youtube, videos, nuevo_bloque, patron)
         elif opcion == OPT_LINKS:
-            accion_comprobar_links(youtube, videos, patron, channel_id)
+            accion_comprobar_links(youtube, videos, channel_id)
         elif opcion == OPT_SIN_CUP:
             accion_videos_sin_cupones(videos, patron)
         elif opcion == OPT_COMENTARIOS:
