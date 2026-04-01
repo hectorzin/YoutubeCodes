@@ -2,6 +2,7 @@ import os
 import re
 import sys
 import json
+import gzip
 import pickle
 import time
 import subprocess
@@ -31,7 +32,7 @@ REPORTE_LINKS_FILE = 'links_rotos.txt'
 LINKS_ESTADO_FILE       = 'links_estado.json'
 COMENTARIOS_ESTADO_FILE = 'comentarios_estado.json'
 EXCLUSIONES_FILE = 'exclusiones.txt'
-CACHE_VIDEOS_FILE = 'cache_videos.json'
+CACHE_VIDEOS_FILE = 'cache_videos.json.gz'
 
 MESES_ES = {
     1: 'ENERO', 2: 'FEBRERO', 3: 'MARZO', 4: 'ABRIL',
@@ -416,16 +417,18 @@ def cargar_estado_comentarios():
 
 
 def guardar_cache_videos(videos, info_canal):
-    with open(CACHE_VIDEOS_FILE, 'w', encoding='utf-8') as f:
-        json.dump({'videos': videos, 'info_canal': info_canal,
-                   'fecha': datetime.now().strftime('%d/%m/%Y %H:%M')}, f, ensure_ascii=False)
+    data = json.dumps({'videos': videos, 'info_canal': info_canal,
+                       'fecha': datetime.now().strftime('%d/%m/%Y %H:%M')},
+                      ensure_ascii=False).encode('utf-8')
+    with gzip.open(CACHE_VIDEOS_FILE, 'wb') as f:
+        f.write(data)
 
 
 def cargar_cache_videos():
     if not os.path.exists(CACHE_VIDEOS_FILE):
         return None, None, None
-    with open(CACHE_VIDEOS_FILE, 'r', encoding='utf-8') as f:
-        data = json.load(f)
+    with gzip.open(CACHE_VIDEOS_FILE, 'rb') as f:
+        data = json.loads(f.read().decode('utf-8'))
     return data['videos'], data['info_canal'], data.get('fecha', '?')
 
 
@@ -1174,9 +1177,8 @@ def main():
         if nuevo_bloque:
             ops.append(OPT_CUPONES)
         ops.append(OPT_LINKS)
-        if nuevo_bloque:
-            ops.append(OPT_SIN_CUP)
-            ops.append(OPT_COMENTARIOS)
+        ops.append(OPT_SIN_CUP)
+        ops.append(OPT_COMENTARIOS)
         if not offline:
             ops.append(OPT_RESCAN)
         ops.append(OPT_SALIR)
