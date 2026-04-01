@@ -11,6 +11,7 @@ from datetime import datetime
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
 from playwright.sync_api import sync_playwright
 from rich.console import Console
 from rich.panel import Panel
@@ -1110,10 +1111,12 @@ def dibujar_cabecera(info_canal, n_videos, nuevo_bloque, stats=None, estado_link
     ))
 
 
-def mostrar_menu(info_canal, n_videos, nuevo_bloque, stats=None, estado_links=None, estado_comentarios=None, offline=False):
+def mostrar_menu(info_canal, n_videos, nuevo_bloque, stats=None, estado_links=None, estado_comentarios=None, offline=False, quota_agotada=False):
     console.clear()
     dibujar_cabecera(info_canal, n_videos, nuevo_bloque, stats, estado_links, estado_comentarios)
-    if offline:
+    if quota_agotada:
+        console.print('[bold red]⚠  CUOTA DE LA API DE YOUTUBE AGOTADA — usando caché local (se resetea a medianoche hora del Pacífico)[/bold red]')
+    elif offline:
         console.print('[bold red]⚠  MODO OFFLINE — los datos son del caché local, no de YouTube en tiempo real[/bold red]')
     console.print()
 
@@ -1144,6 +1147,7 @@ def main():
     console.rule(style='bright_black')
     console.print()
 
+    quota_agotada = False
     youtube = None
     if offline:
         videos, info_canal, fecha_cache = cargar_cache_videos()
@@ -1157,11 +1161,24 @@ def main():
         youtube = autenticar()
         console.print('[green]✓[/green] Autenticación correcta\n')
 
-        with console.status('[bold]Obteniendo lista de vídeos del canal...[/bold]'):
-            videos = obtener_todos_los_videos(youtube)
-            info_canal = obtener_info_canal(youtube)
-        guardar_cache_videos(videos, info_canal)
-        console.print(f'[green]✓[/green] [bold]{len(videos)}[/bold] vídeos en el canal')
+        try:
+            with console.status('[bold]Obteniendo lista de vídeos del canal...[/bold]'):
+                videos = obtener_todos_los_videos(youtube)
+                info_canal = obtener_info_canal(youtube)
+            guardar_cache_videos(videos, info_canal)
+            console.print(f'[green]✓[/green] [bold]{len(videos)}[/bold] vídeos en el canal')
+        except HttpError as e:
+            if e.resp.status == 403 and 'quotaExceeded' in str(e.content):
+                console.print('[bold red]⚠  Cuota de YouTube agotada — cargando caché local...[/bold red]')
+                videos, info_canal, fecha_cache = cargar_cache_videos()
+                if not videos:
+                    console.print('[red]ERROR: No hay caché. Vuelve a intentarlo mañana cuando se resetee la cuota.[/red]')
+                    return
+                console.print(f'[yellow]Usando caché del {fecha_cache}[/yellow] ([bold]{len(videos)}[/bold] vídeos)')
+                offline = True
+                quota_agotada = True
+            else:
+                raise
 
     OPT_CUPONES      = 'Actualizar cupones en las descripciones'
     OPT_LINKS        = 'Comprobar links de AliExpress y Amazon'
@@ -1203,7 +1220,7 @@ def main():
 
     while True:
         mostrar_menu(info_canal, len(videos), nuevo_bloque, calcular_stats(),
-                     cargar_estado_links(), cargar_estado_comentarios(), offline)
+                     cargar_estado_links(), cargar_estado_comentarios(), offline, quota_agotada)
         opcion = questionary.select(
             'Elige una opción:',
             choices=build_opciones(),
