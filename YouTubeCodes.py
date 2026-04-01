@@ -32,7 +32,8 @@ CUPONES_FILE = 'cupones.txt'
 REPORTE_LINKS_FILE = 'links_rotos.txt'
 LINKS_ESTADO_FILE       = 'links_estado.json'
 COMENTARIOS_ESTADO_FILE = 'comentarios_estado.json'
-EXCLUSIONES_FILE = 'exclusiones.txt'
+EXCLUSIONES_FILE         = 'exclusiones.txt'
+DOMINIOS_IGNORADOS_FILE  = 'dominios_ignorados.txt'
 CACHE_VIDEOS_FILE = 'cache_videos.json.gz'
 
 MESES_ES = {
@@ -44,6 +45,8 @@ MESES_ES = {
 PATRON_FECHA = r'[A-ZÁÉÍÓÚ]+\s+\d{4}'
 PATRON_URL = r'https?://[^\s\)\]>\"\']*aliexpress\.com[^\s\)\]>\"\']*'
 PATRON_URL_AMAZON = r'https?://(?:amzn\.to|amzn\.eu|www\.amazon\.[a-z.]+)/[^\s\)\]>\"\']*'
+PATRON_URL_OTROS  = r'https?://[^\s\)\]>\"\']*'
+DOMINIOS_EXCLUIR  = ('aliexpress.com', 'amzn.to', 'amzn.eu', 'amazon.', 'youtube.com', 'youtu.be')
 
 HEADERS_REQUESTS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
@@ -270,17 +273,24 @@ def es_captcha(page):
             return True
         if page.locator('iframe[src*="captcha"]').count() > 0:
             return True
+        titulo = page.title().lower()
+        if 'just a moment' in titulo or 'checking your browser' in titulo:
+            return True
         texto = page.inner_text('body').lower()
-        return 'we need to check if you are a robot' in texto
+        return ('we need to check if you are a robot' in texto
+                or 'checking if the site connection is secure' in texto
+                or 'enable javascript and cookies to continue' in texto)
     except Exception:
         return False
 
 
 def esperar_si_captcha(page):
-    if es_captcha(page):
-        console.print('\n[yellow]⚠  CAPTCHA detectado. Resuélvelo en Chrome y pulsa ENTER para continuar...[/yellow]')
-        input()
-        page.wait_for_timeout(3000)
+    page.wait_for_timeout(4000)
+    if not es_captcha(page):
+        return
+    console.print('\n[yellow]⚠  CAPTCHA detectado. Resuélvelo en Chrome y pulsa ENTER para continuar...[/yellow]')
+    input()
+    page.wait_for_timeout(3000)
 
 
 def comprobar_link_chrome(page, url):
@@ -406,6 +416,9 @@ def guardar_estado_links(links_rotos, links_geo):
         json.dump({
             'rotos': len({e['url'] for e in links_rotos}),
             'geo': len({e['url'] for e in links_geo}),
+            'rotos_ali':   len({e['url'] for e in links_rotos if e.get('tienda') == 'aliexpress'}),
+            'rotos_amz':   len({e['url'] for e in links_rotos if e.get('tienda') == 'amazon'}),
+            'rotos_otros': len({e['url'] for e in links_rotos if e.get('tienda') == 'otro'}),
             'fecha': datetime.now().strftime('%d/%m/%Y %H:%M'),
         }, f)
 
@@ -623,26 +636,49 @@ def accion_comprobar_links(youtube, videos, channel_id=None):
         url for v in videos
         for url in extraer_links_amazon(v['snippet']['description'])
     }
-    n_ali = len(links_ali_unicos)
-    n_amz = len(links_amz_unicos)
-    n_com = len(videos)
+    dominios_ignorados = cargar_dominios_ignorados()
+    links_otros_unicos = {
+        url for v in videos
+        for url in re.findall(PATRON_URL_OTROS, v['snippet']['description'])
+        if not any(d in url for d in DOMINIOS_EXCLUIR)
+    }
+    links_otros_sin_ignorados = {
+        url for url in links_otros_unicos
+        if not any(
+            ('.'.join(re.sub(r'^https?://', '', url).split('/')[0].split('.')[-2:])) == d
+            for d in dominios_ignorados
+        )
+    }
+    n_ali         = len(links_ali_unicos)
+    n_amz         = len(links_amz_unicos)
+    n_otros       = len(links_otros_sin_ignorados)
+    n_otros_total = len(links_otros_unicos)
+    n_com         = len(videos)
 
-    console.print(f'  Amazon:     [bold]{n_amz}[/bold] links únicos [dim](Chrome, detecta sin stock y sin opción de compra disponible)[/dim]')
-    console.print(f'  AliExpress: [bold]{n_ali}[/bold] links únicos [dim](Chrome, detecta links rotos o geo-restringidos)[/dim]')
+    console.print(f'  Amazon:      [bold]{n_amz}[/bold] links únicos [dim](Chrome, detecta sin stock)[/dim]')
+    console.print(f'  AliExpress:  [bold]{n_ali}[/bold] links únicos [dim](Chrome, detecta links rotos o geo-restringidos)[/dim]')
+    ignorados_txt = f' [dim](+ {n_otros_total - n_otros} ignorados)[/dim]' if n_otros_total > n_otros else ''
+    console.print(f'  Otros links: [bold]{n_otros}[/bold] links únicos{ignorados_txt} [dim](rápido, detecta "page not found")[/dim]')
     console.print(f'  Comentarios: [bold]{n_com}[/bold] vídeos a escanear · coste: [bold rgb(255,0,0)]~{n_com} unidades[/bold rgb(255,0,0)]')
     console.print(f'  📊 [link=https://console.cloud.google.com/apis/api/youtube.googleapis.com/quotas][bold cyan]Ver cuota disponible en Google Cloud ↗[/bold cyan][/link]')
     console.print()
-    console.print('[red]AVISO: Esto cerrará Chrome y lo abrirá en modo depuración.[/red]\n')
+    console.print('[red]AVISO: Amazon y AliExpress cerrarán Chrome y lo abrirán en modo depuración.[/red]\n')
 
-    OPT_AMZ  = f'Amazon ({n_amz} links)'
-    OPT_ALI  = f'AliExpress ({n_ali} links)'
-    OPT_COM  = f'Comentarios fijados (~{n_com} unidades extra)'
+    OPT_AMZ          = f'Amazon ({n_amz} links)'
+    OPT_ALI          = f'AliExpress ({n_ali} links)'
+    OPT_OTROS        = f'Otros links ({n_otros} links)'
+    OPT_OTROS_IGNOR  = f'Otros links ignorados ({n_otros_total - n_otros} links)'
+    OPT_COM          = f'Comentarios fijados (~{n_com} unidades extra)'
 
     opciones_disponibles = []
     if n_amz:
         opciones_disponibles.append(OPT_AMZ)
     if n_ali:
         opciones_disponibles.append(OPT_ALI)
+    if n_otros:
+        opciones_disponibles.append(OPT_OTROS)
+    if dominios_ignorados and n_otros_total > n_otros:
+        opciones_disponibles.append(OPT_OTROS_IGNOR)
     if videos:
         opciones_disponibles.append(OPT_COM)
 
@@ -655,9 +691,11 @@ def accion_comprobar_links(youtube, videos, channel_id=None):
         console.print('[yellow]Cancelado.[/yellow]')
         return
 
-    hacer_amz           = OPT_AMZ in seleccion
-    hacer_ali           = OPT_ALI in seleccion
-    incluir_comentarios = OPT_COM in seleccion
+    hacer_amz    = OPT_AMZ        in seleccion
+    hacer_ali    = OPT_ALI        in seleccion
+    hacer_otros  = OPT_OTROS      in seleccion
+    hacer_ignor  = OPT_OTROS_IGNOR in seleccion
+    incluir_comentarios = OPT_COM   in seleccion
 
     # ── Amazon (Chrome) ───────────────────────────────────────────────────────
     links_amazon_rotos = []
@@ -757,11 +795,88 @@ def accion_comprobar_links(youtube, videos, channel_id=None):
         if video_links:
             links_rotos_ali, links_geo_ali = chequear_links_videos(video_links)
 
+    # ── Otros links (page not found) ─────────────────────────────────────────
+    links_otros_rotos = []
+
+    urls_otros_a_comprobar = set()
+    if hacer_otros:
+        urls_otros_a_comprobar |= links_otros_sin_ignorados
+    if hacer_ignor:
+        urls_otros_a_comprobar |= (links_otros_unicos - links_otros_sin_ignorados)
+
+    urls_cloudflare = []
+
+    if urls_otros_a_comprobar:
+        with Progress(SpinnerColumn(), TextColumn('[progress.description]{task.description}'),
+                      BarColumn(), MofNCompleteColumn(), console=console) as progress:
+            task = progress.add_task('Comprobando otros links', total=len(urls_otros_a_comprobar))
+            for url in urls_otros_a_comprobar:
+                try:
+                    r = requests.get(url, headers=HEADERS_REQUESTS, allow_redirects=True, timeout=10)
+                    texto = r.text.lower()
+                    if r.status_code == 403 and 'just a moment' in texto:
+                        urls_cloudflare.append(url)
+                    elif r.status_code == 404 or 'page not found' in texto or 'página no encontrada' in texto:
+                        for v in videos:
+                            if url in v['snippet']['description']:
+                                links_otros_rotos.append({
+                                    'url': url,
+                                    'video': v['snippet']['title'],
+                                    'video_id': v['id'],
+                                    'tipo': 'descripcion',
+                                    'tienda': 'otro',
+                                    'linea': linea_con_link(v['snippet']['description'], url),
+                                })
+                except Exception:
+                    pass
+                progress.advance(task)
+
+    if urls_cloudflare:
+        console.print(f'\n[yellow]{len(urls_cloudflare)} link(s) protegidos por Cloudflare (no se pueden comprobar sin navegador):[/yellow]')
+        for url in urls_cloudflare:
+            console.print(f'  [dim]{url}[/dim]')
+        resp = console.input('\n[dim]¿Comprobar estos links con Chrome? [s/n]: [/dim]').strip().lower()
+        if resp == 's' and iniciar_chrome():
+            playwright_cf = sync_playwright().start()
+            try:
+                browser_cf = playwright_cf.chromium.connect_over_cdp(f'http://127.0.0.1:{CHROME_DEBUG_PORT}')
+                page_cf = browser_cf.contexts[0].new_page()
+                with Progress(SpinnerColumn(), TextColumn('[progress.description]{task.description}'),
+                              BarColumn(), MofNCompleteColumn(),
+                              TextColumn('[dim]{task.fields[url]}[/dim]'),
+                              console=console) as progress:
+                  task_cf = progress.add_task('Comprobando con Chrome', total=len(urls_cloudflare), url='')
+                  for url in urls_cloudflare:
+                    progress.update(task_cf, url=url[:70])
+                    try:
+                        page_cf.goto(url, wait_until='domcontentloaded', timeout=20000)
+                        esperar_si_captcha(page_cf)
+                        texto = page_cf.inner_text('body').lower()
+                        titulo = page_cf.title().lower()
+                        if ('page not found' in texto or 'página no encontrada' in texto
+                                or 'page not found' in titulo or 'not found' in titulo
+                                or titulo.startswith('404')):
+                            for v in videos:
+                                if url in v['snippet']['description']:
+                                    links_otros_rotos.append({
+                                        'url': url,
+                                        'video': v['snippet']['title'],
+                                        'video_id': v['id'],
+                                        'tipo': 'descripcion',
+                                        'tienda': 'otro',
+                                        'linea': linea_con_link(v['snippet']['description'], url),
+                                    })
+                    except Exception:
+                        pass
+                    progress.advance(task_cf)
+            finally:
+                playwright_cf.stop()
+
     # ── Combinar y guardar ────────────────────────────────────────────────────
     for e in links_rotos_ali + links_geo_ali:
         e.setdefault('tienda', 'aliexpress')
 
-    links_rotos = links_amazon_rotos + links_rotos_ali
+    links_rotos = links_amazon_rotos + links_rotos_ali + links_otros_rotos
     links_geo   = links_geo_ali
 
     guardar_reporte_links(links_rotos, links_geo)
@@ -773,7 +888,12 @@ def accion_comprobar_links(youtube, videos, channel_id=None):
     urls_unicas = list(dict.fromkeys(e['url'] for e in todos_problemas))
     console.print('\n[bold]Links con problemas:[/bold]\n')
     for i, url in enumerate(urls_unicas, 1):
-        tienda_sym = '🛒' if any(e.get('tienda') == 'amazon' and e['url'] == url for e in todos_problemas) else '🛍'
+        if any(e.get('tienda') == 'amazon' and e['url'] == url for e in todos_problemas):
+            tienda_sym = '🛒'
+        elif any(e.get('tienda') == 'otro' and e['url'] == url for e in todos_problemas):
+            tienda_sym = '🔗'
+        else:
+            tienda_sym = '🛍'
         console.print(f'  [bold]{i}.[/bold] {tienda_sym} {url}')
         for e in todos_problemas:
             if e['url'] == url:
@@ -831,6 +951,19 @@ def guardar_exclusiones(videos_nuevos):
     with open(EXCLUSIONES_FILE, 'w', encoding='utf-8') as f:
         for vid_id in sorted(entradas):
             f.write(entradas[vid_id] + '\n')
+
+
+def cargar_dominios_ignorados():
+    if not os.path.exists(DOMINIOS_IGNORADOS_FILE):
+        return set()
+    with open(DOMINIOS_IGNORADOS_FILE, 'r', encoding='utf-8') as f:
+        return {line.strip() for line in f if line.strip() and not line.startswith('#')}
+
+
+def guardar_dominios_ignorados(dominios):
+    with open(DOMINIOS_IGNORADOS_FILE, 'w', encoding='utf-8') as f:
+        for d in sorted(dominios):
+            f.write(d + '\n')
 
 
 def accion_videos_sin_cupones(videos, patron):
@@ -942,13 +1075,13 @@ def accion_comprobar_comentarios(youtube, videos, nuevo_bloque, patron, channel_
         console.print(f'\n[yellow bold]Sin actualizar ({len(sin_actualizar_lista)}):[/yellow bold]')
         for titulo, vid_id, _ in sin_actualizar_lista:
             console.print(f'  [yellow]·[/yellow] {titulo}')
-            console.print(f'    [link=https://www.youtube.com/watch?v={vid_id}][blue]https://www.youtube.com/watch?v={vid_id}[/blue][/link]')
+            console.print(f'    [link=https://studio.youtube.com/video/{vid_id}/edit][blue]https://studio.youtube.com/video/{vid_id}/edit[/blue][/link]')
 
     if sin_cupones_lista:
         console.print(f'\n[red bold]Sin comentario fijado con cupones ({len(sin_cupones_lista)}):[/red bold]')
         for titulo, vid_id in sin_cupones_lista:
             console.print(f'  [red]·[/red] {titulo}')
-            console.print(f'    [link=https://www.youtube.com/watch?v={vid_id}][blue]https://www.youtube.com/watch?v={vid_id}[/blue][/link]')
+            console.print(f'    [link=https://studio.youtube.com/video/{vid_id}/edit][blue]https://studio.youtube.com/video/{vid_id}/edit[/blue][/link]')
 
     if sin_actualizar_lista:
         console.print()
@@ -1087,12 +1220,17 @@ def dibujar_cabecera(info_canal, n_videos, nuevo_bloque, stats=None, estado_link
     der.add_row('')
 
     if estado_links:
-        der.add_row(Text('Links AliExpress', style='cyan bold'))
+        der.add_row(Text('Links', style='cyan bold'))
         der.add_row(Text('─' * 24, style='bright_black'))
         der.add_row('')
-        rotos, geo = estado_links['rotos'], estado_links['geo']
-        der.add_row(Text.assemble(('● ', 'red' if rotos else 'green'), (f'{rotos} ', 'red' if rotos else 'green'), ('rotos ', 'dim'), ('✗' if rotos else '✓', 'red' if rotos else 'green')))
+        geo = estado_links['geo']
+        rotos_ali   = estado_links.get('rotos_ali',   estado_links['rotos'])
+        rotos_amz   = estado_links.get('rotos_amz',   0)
+        rotos_otros = estado_links.get('rotos_otros', 0)
+        der.add_row(Text.assemble(('● ', 'red' if rotos_ali else 'green'), (f'{rotos_ali} ', 'red' if rotos_ali else 'green'), ('AliExpress rotos', 'dim')))
         der.add_row(Text.assemble(('● ', 'yellow' if geo else 'green'), (f'{geo} ', 'yellow' if geo else 'green'), ('no disponibles en tu región', 'dim')))
+        der.add_row(Text.assemble(('● ', 'red' if rotos_amz else 'green'), (f'{rotos_amz} ', 'red' if rotos_amz else 'green'), ('Amazon rotos', 'dim')))
+        der.add_row(Text.assemble(('● ', 'red' if rotos_otros else 'green'), (f'{rotos_otros} ', 'red' if rotos_otros else 'green'), ('otros rotos', 'dim')))
         der.add_row(Text(f'  última comprobación: {estado_links["fecha"]}', style='dim'))
         der.add_row('')
 
@@ -1109,6 +1247,67 @@ def dibujar_cabecera(info_canal, n_videos, nuevo_bloque, stats=None, estado_link
         border_style='cyan',
         padding=(1, 2),
     ))
+
+
+def accion_listar_otros_links(videos):
+    dominios_ignorados = cargar_dominios_ignorados()
+
+    # url → list de (vid_id, titulo) — todos, ignorados incluidos
+    url_a_videos = {}
+    for video in videos:
+        desc = video['snippet']['description']
+        vid_id = video['id']
+        titulo = video['snippet']['title']
+        urls = re.findall(PATRON_URL_OTROS, desc)
+        for url in dict.fromkeys(urls):
+            if any(d in url for d in DOMINIOS_EXCLUIR):
+                continue
+            url_a_videos.setdefault(url, [])
+            if (vid_id, titulo) not in url_a_videos[url]:
+                url_a_videos[url].append((vid_id, titulo))
+
+    if not url_a_videos:
+        console.print('[green]No se encontraron otros links.[/green]')
+        return
+
+    # agrupar por dominio
+    por_dominio = {}
+    for url, vids in url_a_videos.items():
+        host = re.sub(r'^https?://', '', url).split('/')[0]
+        partes = host.split('.')
+        dominio = '.'.join(partes[-2:]) if len(partes) >= 2 else host
+        por_dominio.setdefault(dominio, []).append((url, vids))
+
+    por_dominio = dict(sorted(por_dominio.items(), key=lambda x: -len(x[1])))
+    total_urls = sum(len(v) for v in por_dominio.values())
+    console.print(f'  [bold]{total_urls}[/bold] links únicos en [bold]{len(por_dominio)}[/bold] dominios\n')
+
+    dominios_lista = list(por_dominio.items())
+    for i, (dominio, links) in enumerate(dominios_lista, 1):
+        n_vids = len({vid_id for _, vids in links for vid_id, _ in vids})
+        ignorado_tag = ' [dim](ignorado)[/dim]' if dominio in dominios_ignorados else ''
+        console.print(f'[bold]{i}.[/bold] [bold cyan]{dominio}[/bold cyan]{ignorado_tag}  [dim]{len(links)} links · {n_vids} vídeos[/dim]')
+        console.print(f'  [dim]{"─" * 60}[/dim]')
+        for url, vids in links:
+            console.print(f'  [link={url}][blue]{url}[/blue][/link]')
+            for vid_id, titulo in vids:
+                url_video = f'https://studio.youtube.com/video/{vid_id}/edit'
+                console.print(f'    [dim][link={url_video}]{titulo[:70]}[/link][/dim]')
+        console.print()
+
+    resp = console.input('[dim]Números de dominios a ignorar en futuras comprobaciones (ej: 1 3 5) o Enter para omitir: [/dim]').strip()
+    if resp:
+        nuevos = set()
+        for tok in resp.split():
+            try:
+                idx = int(tok) - 1
+                if 0 <= idx < len(dominios_lista):
+                    nuevos.add(dominios_lista[idx][0])
+            except ValueError:
+                pass
+        if nuevos:
+            guardar_dominios_ignorados(dominios_ignorados | nuevos)
+            console.print(f'[green]Ignorados: {", ".join(sorted(nuevos))}[/green]')
 
 
 def mostrar_menu(info_canal, n_videos, nuevo_bloque, stats=None, estado_links=None, estado_comentarios=None, offline=False, quota_agotada=False):
@@ -1181,7 +1380,8 @@ def main():
                 raise
 
     OPT_CUPONES      = 'Actualizar cupones en las descripciones'
-    OPT_LINKS        = 'Comprobar links de AliExpress y Amazon'
+    OPT_LINKS        = 'Comprobar links'
+    OPT_OTROS_LINKS  = 'Listar otros links (afiliados, blogs, etc.)'
     OPT_SIN_CUP      = 'Ver vídeos sin bloque de cupones'
     OPT_COMENTARIOS  = 'Comprobar comentarios fijados con cupones'
     OPT_RESCAN       = 'Recargar vídeos del canal'
@@ -1194,6 +1394,7 @@ def main():
         if nuevo_bloque:
             ops.append(OPT_CUPONES)
         ops.append(OPT_LINKS)
+        ops.append(OPT_OTROS_LINKS)
         ops.append(OPT_SIN_CUP)
         ops.append(OPT_COMENTARIOS)
         if not offline:
@@ -1242,6 +1443,8 @@ def main():
             accion_actualizar_cupones(youtube, videos, nuevo_bloque, patron)
         elif opcion == OPT_LINKS:
             accion_comprobar_links(youtube, videos, channel_id)
+        elif opcion == OPT_OTROS_LINKS:
+            accion_listar_otros_links(videos)
         elif opcion == OPT_SIN_CUP:
             accion_videos_sin_cupones(videos, patron)
         elif opcion == OPT_COMENTARIOS:
