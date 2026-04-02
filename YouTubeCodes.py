@@ -697,6 +697,32 @@ def accion_comprobar_links(youtube, videos, channel_id=None):
     hacer_ignor  = OPT_OTROS_IGNOR in seleccion
     incluir_comentarios = OPT_COM   in seleccion
 
+    # ── Obtener comentarios fijados una sola vez ──────────────────────────────
+    comentarios = {}  # vid_id -> (comment_id, texto)
+    if incluir_comentarios:
+        with Progress(SpinnerColumn(), TextColumn('[progress.description]{task.description}'),
+                      BarColumn(), MofNCompleteColumn(),
+                      TextColumn('[dim]{task.fields[titulo]}[/dim]'), console=console) as progress:
+            task = progress.add_task('Obteniendo comentarios', total=n_com, titulo='')
+            for video in videos:
+                progress.update(task, titulo=video['snippet']['title'][:60])
+                try:
+                    resp = youtube.commentThreads().list(
+                        part='snippet', videoId=video['id'],
+                        maxResults=1, order='relevance',
+                    ).execute()
+                    items = resp.get('items', [])
+                    if items:
+                        thread = items[0]
+                        top = thread['snippet']['topLevelComment']['snippet']
+                        if top.get('authorChannelId', {}).get('value', '') == channel_id:
+                            texto = top.get('textOriginal', '') or top.get('textDisplay', '')
+                            comment_id = thread['snippet']['topLevelComment']['id']
+                            comentarios[video['id']] = (comment_id, texto)
+                except Exception:
+                    pass
+                progress.advance(task)
+
     # ── Amazon (Chrome) ───────────────────────────────────────────────────────
     links_amazon_rotos = []
 
@@ -704,9 +730,13 @@ def accion_comprobar_links(youtube, videos, channel_id=None):
         video_links_amz = []
         for video in videos:
             descripcion = video['snippet']['description']
-            links = extraer_links_amazon(descripcion)
-            if links:
-                pares = [('descripcion', url, linea_con_link(descripcion, url), None, None) for url in links]
+            pares = [('descripcion', url, linea_con_link(descripcion, url), None, None)
+                     for url in dict.fromkeys(extraer_links_amazon(descripcion))]
+            if incluir_comentarios and video['id'] in comentarios:
+                comment_id, texto = comentarios[video['id']]
+                pares += [('comentario', url, linea_con_link(texto, url), comment_id, texto)
+                          for url in dict.fromkeys(extraer_links_amazon(texto))]
+            if pares:
                 video_links_amz.append((video, pares))
 
         if iniciar_chrome():
@@ -715,16 +745,14 @@ def accion_comprobar_links(youtube, videos, channel_id=None):
                 browser_amz = playwright_amz.chromium.connect_over_cdp(f'http://127.0.0.1:{CHROME_DEBUG_PORT}')
                 page_amz = browser_amz.contexts[0].new_page()
                 cache_amz = {}
-                with Progress(
-                    SpinnerColumn(),
-                    TextColumn('[progress.description]{task.description}'),
-                    BarColumn(),
-                    MofNCompleteColumn(),
-                    TextColumn('[dim]{task.fields[url]}[/dim]'),
-                    console=console,
-                ) as progress:
-                    task = progress.add_task('Comprobando Amazon', total=n_amz, url='')
-                    for url in links_amz_unicos:
+                urls_amz_todas = list(dict.fromkeys(
+                    url for _, pares in video_links_amz for _, url, *_ in pares
+                ))
+                with Progress(SpinnerColumn(), TextColumn('[progress.description]{task.description}'),
+                              BarColumn(), MofNCompleteColumn(),
+                              TextColumn('[dim]{task.fields[url]}[/dim]'), console=console) as progress:
+                    task = progress.add_task('Comprobando Amazon', total=len(urls_amz_todas), url='')
+                    for url in urls_amz_todas:
                         progress.update(task, url=url[:70])
                         cache_amz[url] = comprobar_link_amazon_chrome(page_amz, url)
                         progress.advance(task)
@@ -754,43 +782,14 @@ def accion_comprobar_links(youtube, videos, channel_id=None):
     if hacer_ali:
         for video in videos:
             descripcion = video['snippet']['description']
-            links = extraer_links_aliexpress(descripcion)
-            if links:
-                pares = [('descripcion', url, linea_con_link(descripcion, url), None, None) for url in links]
+            pares = [('descripcion', url, linea_con_link(descripcion, url), None, None)
+                     for url in dict.fromkeys(extraer_links_aliexpress(descripcion))]
+            if incluir_comentarios and video['id'] in comentarios:
+                comment_id, texto = comentarios[video['id']]
+                pares += [('comentario', url, linea_con_link(texto, url), comment_id, texto)
+                          for url in dict.fromkeys(extraer_links_aliexpress(texto))]
+            if pares:
                 video_links.append((video, pares))
-
-        if incluir_comentarios:
-            with Progress(
-                SpinnerColumn(),
-                TextColumn('[progress.description]{task.description}'),
-                BarColumn(),
-                MofNCompleteColumn(),
-                TextColumn('[dim]{task.fields[titulo]}[/dim]'),
-                console=console,
-            ) as progress:
-                task = progress.add_task('Obteniendo comentarios', total=n_com, titulo='')
-                for video in videos:
-                    progress.update(task, titulo=video['snippet']['title'][:60])
-                    try:
-                        resp = youtube.commentThreads().list(
-                            part='snippet', videoId=video['id'],
-                            maxResults=1, order='relevance',
-                        ).execute()
-                        items = resp.get('items', [])
-                        if items:
-                            thread = items[0]
-                            top = thread['snippet']['topLevelComment']['snippet']
-                            if top.get('authorChannelId', {}).get('value', '') == channel_id:
-                                texto = top.get('textOriginal', '') or top.get('textDisplay', '')
-                                comment_id = thread['snippet']['topLevelComment']['id']
-                                links_com = extraer_links_aliexpress(texto)
-                                if links_com:
-                                    pares = [('comentario', url, linea_con_link(texto, url), comment_id, texto)
-                                             for url in links_com]
-                                    video_links.append((video, pares))
-                    except Exception:
-                        pass
-                    progress.advance(task)
 
         if video_links:
             links_rotos_ali, links_geo_ali = chequear_links_videos(video_links)
@@ -803,6 +802,16 @@ def accion_comprobar_links(youtube, videos, channel_id=None):
         urls_otros_a_comprobar |= links_otros_sin_ignorados
     if hacer_ignor:
         urls_otros_a_comprobar |= (links_otros_unicos - links_otros_sin_ignorados)
+    if incluir_comentarios:
+        for vid_id, (comment_id, texto) in comentarios.items():
+            for url in re.findall(PATRON_URL_OTROS, texto):
+                if any(d in url for d in DOMINIOS_EXCLUIR):
+                    continue
+                host = re.sub(r'^https?://', '', url).split('/')[0]
+                partes = host.split('.')
+                dominio = '.'.join(partes[-2:]) if len(partes) >= 2 else host
+                if dominio not in dominios_ignorados or hacer_ignor:
+                    urls_otros_a_comprobar.add(url)
 
     urls_cloudflare = []
 
@@ -820,13 +829,20 @@ def accion_comprobar_links(youtube, videos, channel_id=None):
                         for v in videos:
                             if url in v['snippet']['description']:
                                 links_otros_rotos.append({
-                                    'url': url,
-                                    'video': v['snippet']['title'],
-                                    'video_id': v['id'],
-                                    'tipo': 'descripcion',
+                                    'url': url, 'video': v['snippet']['title'],
+                                    'video_id': v['id'], 'tipo': 'descripcion',
                                     'tienda': 'otro',
                                     'linea': linea_con_link(v['snippet']['description'], url),
                                 })
+                            if v['id'] in comentarios:
+                                comment_id, texto_com = comentarios[v['id']]
+                                if url in texto_com:
+                                    links_otros_rotos.append({
+                                        'url': url, 'video': v['snippet']['title'],
+                                        'video_id': v['id'], 'tipo': 'comentario',
+                                        'tienda': 'otro',
+                                        'linea': linea_con_link(texto_com, url),
+                                    })
                 except Exception:
                     pass
                 progress.advance(task)
