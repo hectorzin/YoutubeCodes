@@ -463,6 +463,8 @@ def guardar_reporte_links(links_rotos, links_geo):
         console.print('[green]✓ No se encontraron links con problemas.[/green]')
         return
 
+    console.print('[dim]  📝 descripción   💬 comentario   🛍 AliExpress   🛒 Amazon   🔗 otro[/dim]')
+
     if links_rotos:
         console.print(f'\n[red bold]✗ ELIMINADOS / NO PROMOCIONABLES ({len(links_rotos)}):[/red bold]')
         console.rule(style='red')
@@ -902,7 +904,8 @@ def accion_comprobar_links(youtube, videos, channel_id=None):
         return
 
     urls_unicas = list(dict.fromkeys(e['url'] for e in todos_problemas))
-    console.print('\n[bold]Links con problemas:[/bold]\n')
+    console.print('\n[bold]Links con problemas:[/bold]')
+    console.print('[dim]  📝 descripción   💬 comentario   🛍 AliExpress   🛒 Amazon   🔗 otro[/dim]\n')
     for i, url in enumerate(urls_unicas, 1):
         if any(e.get('tienda') == 'amazon' and e['url'] == url for e in todos_problemas):
             tienda_sym = '🛒'
