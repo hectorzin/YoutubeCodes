@@ -1,5 +1,6 @@
 client_secret.json
 token.pickle
+token.json
 aliexpress_cookies.json
 links_rotos.txt
 links_estado.json
@@ -11,3 +12,4 @@ screenshot_*.png
 __pycache__/
 *.pyc
 .claude/
+.DS_Store

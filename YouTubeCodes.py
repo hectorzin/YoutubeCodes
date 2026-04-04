@@ -2,13 +2,15 @@ import os
 import re
 import sys
 import json
-import pickle
+import stat
 import time
 import subprocess
 import requests
 from datetime import datetime
+from urllib.parse import urlparse
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
+from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from playwright.sync_api import sync_playwright
 from rich.console import Console
@@ -24,7 +26,7 @@ from rich import box
 console = Console()
 
 SCOPES = ['https://www.googleapis.com/auth/youtube.force-ssl']
-TOKEN_FILE = 'token.pickle'
+TOKEN_FILE = 'token.json'
 CREDENTIALS_FILE = 'client_secret.json'
 CUPONES_FILE = 'cupones.txt'
 REPORTE_LINKS_FILE = 'links_rotos.txt'
@@ -118,8 +120,7 @@ def autenticar():
     creds = None
 
     if os.path.exists(TOKEN_FILE):
-        with open(TOKEN_FILE, 'rb') as f:
-            creds = pickle.load(f)
+        creds = Credentials.from_authorized_user_file(TOKEN_FILE, SCOPES)
 
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
@@ -127,8 +128,9 @@ def autenticar():
         else:
             flow = InstalledAppFlow.from_client_secrets_file(CREDENTIALS_FILE, SCOPES)
             creds = flow.run_local_server(port=0)
-        with open(TOKEN_FILE, 'wb') as f:
-            pickle.dump(creds, f)
+        with open(TOKEN_FILE, 'w', encoding='utf-8') as f:
+            f.write(creds.to_json())
+        os.chmod(TOKEN_FILE, stat.S_IRUSR | stat.S_IWUSR)
 
     return build('youtube', 'v3', credentials=creds)
 
@@ -542,7 +544,7 @@ def accion_actualizar_cupones(youtube, videos, nuevo_bloque, patron):
     coste = pendientes * 50 + lecturas
     console.print()
     console.print(f'  [dim]Vídeos a modificar: [bold]{pendientes}[/bold]  ·  coste estimado: [/dim][bold rgb(255,0,0)]~{coste} unidades[/bold rgb(255,0,0)]')
-    console.print(f'  📊 [link=https://console.cloud.google.com/apis/api/youtube.googleapis.com/quotas][bold cyan]Ver cuota disponible en Google Cloud ↗[/bold cyan][/link]')
+    console.print(f'  📊 [dim]Cuota:[/dim] [cyan]https://console.cloud.google.com/apis/api/youtube.googleapis.com/quotas[/cyan]')
     console.print()
     if not preguntar(f'¿Actualizar [bold]{pendientes}[/bold] vídeo{"s" if pendientes != 1 else ""}?'):
         console.print('[yellow]Cancelado.[/yellow]')
@@ -636,7 +638,7 @@ def accion_comprobar_links(youtube, videos, channel_id=None):
     console.print(f'  Amazon:     [bold]{n_amz}[/bold] links únicos [dim](Chrome, detecta sin stock y sin opción de compra disponible)[/dim]')
     console.print(f'  AliExpress: [bold]{n_ali}[/bold] links únicos [dim](Chrome, detecta links rotos o geo-restringidos)[/dim]')
     console.print(f'  Comentarios: [bold]{n_com}[/bold] vídeos a escanear · coste: [bold rgb(255,0,0)]~{n_com} unidades[/bold rgb(255,0,0)]')
-    console.print(f'  📊 [link=https://console.cloud.google.com/apis/api/youtube.googleapis.com/quotas][bold cyan]Ver cuota disponible en Google Cloud ↗[/bold cyan][/link]')
+    console.print(f'  📊 [dim]Cuota:[/dim] [cyan]https://console.cloud.google.com/apis/api/youtube.googleapis.com/quotas[/cyan]')
     console.print()
     console.print('[red]AVISO: Esto cerrará Chrome y lo abrirá en modo depuración.[/red]\n')
 
@@ -803,6 +805,10 @@ def accion_comprobar_links(youtube, videos, channel_id=None):
         url_nueva = console.input(f'[dim]Nueva URL para {url_vieja[:60]}...: [/dim]').strip()
         if not url_nueva:
             continue
+        parsed = urlparse(url_nueva)
+        if parsed.scheme not in ('http', 'https') or not parsed.netloc:
+            console.print('[red]URL no válida. Debe comenzar por http:// o https://[/red]')
+            continue
         entradas_url = [e for e in todos_problemas if e['url'] == url_vieja]
         entradas_desc = [e for e in entradas_url if e['tipo'] == 'descripcion']
         entradas_com  = [e for e in entradas_url if e['tipo'] == 'comentario']
@@ -879,7 +885,7 @@ def accion_comprobar_comentarios(youtube, videos, nuevo_bloque, patron, channel_
 
     n = len(videos_con_cupones)
     console.print(f'[bold]{n}[/bold] vídeos con cupones. Coste estimado: [bold rgb(255,0,0)]~{n} unidades[/bold rgb(255,0,0)]')
-    console.print(f'  📊 [link=https://console.cloud.google.com/apis/api/youtube.googleapis.com/quotas][bold cyan]Ver cuota disponible en Google Cloud ↗[/bold cyan][/link]')
+    console.print(f'  📊 [dim]Cuota:[/dim] [cyan]https://console.cloud.google.com/apis/api/youtube.googleapis.com/quotas[/cyan]')
     console.print()
     if not preguntar(f'¿Comprobar comentarios fijados de {n} vídeo{"s" if n != 1 else ""}?'):
         console.print('[yellow]Cancelado.[/yellow]')
@@ -960,7 +966,7 @@ def accion_comprobar_comentarios(youtube, videos, nuevo_bloque, patron, channel_
         console.print()
         coste = len(sin_actualizar_lista) * 50
         console.print(f'  [dim]Coste de actualizar comentarios: [/dim][bold rgb(255,0,0)]~{coste} unidades[/bold rgb(255,0,0)]')
-        console.print(f'  📊 [link=https://console.cloud.google.com/apis/api/youtube.googleapis.com/quotas][bold cyan]Ver cuota disponible en Google Cloud ↗[/bold cyan][/link]')
+        console.print(f'  📊 [dim]Cuota:[/dim] [cyan]https://console.cloud.google.com/apis/api/youtube.googleapis.com/quotas[/cyan]')
         console.print()
         resp = console.input(f'  [dim]¿Actualizar {len(sin_actualizar_lista)} comentario{"s" if len(sin_actualizar_lista) != 1 else ""}? [s/n]: [/dim]').strip().lower()
         if resp == 's':
@@ -1126,11 +1132,22 @@ def mostrar_menu(info_canal, n_videos, nuevo_bloque, stats=None, estado_links=No
 
 
 def main():
-    if not hay_terminal_interactiva():
+    check_mode = '--check' in sys.argv
+
+    if not check_mode and not hay_terminal_interactiva():
         console.print('[red]ERROR: Esta app necesita una terminal interactiva.[/red]')
         console.print('[yellow]Ábrela desde la terminal integrada y ejecútala ahí, no desde el panel Output/Code Runner/Task runner.[/yellow]')
         console.print('[dim]Ejemplo: source .venv/bin/activate && python YouTubeCodes.py --offline[/dim]')
         raise SystemExit(1)
+
+    if check_mode:
+        if not os.path.exists(CREDENTIALS_FILE):
+            console.print(f'[red]ERROR: No se encontró "{CREDENTIALS_FILE}"[/red]')
+            raise SystemExit(1)
+        youtube = autenticar()
+        info = obtener_info_canal(youtube)
+        console.print(f'[green]✓[/green] Autenticación correcta — canal: [bold]{info["nombre"]}[/bold] ({info["handle"]})')
+        raise SystemExit(0)
 
     offline = '--offline' in sys.argv
 
