@@ -255,6 +255,10 @@ def bloquear_instancia():
     try:
         fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
     except BlockingIOError:
+        try:
+            handle.close()
+        except OSError:
+            pass
         console.print('[red]ERROR: Ya hay otra instancia de YouTubeCodes ejecutándose.[/red]')
         raise SystemExit(1)
     handle.seek(0)

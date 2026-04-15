@@ -368,6 +368,8 @@ class YouTubeCodesTests(unittest.TestCase):
 
         with patch.object(yc.sys, 'argv', ['YouTubeCodes.py', '--offline']), \
              patch.object(yc, 'hay_terminal_interactiva', return_value=True), \
+             patch.object(yc, 'bloquear_instancia'), \
+             patch.object(yc.atexit, 'register'), \
              patch.object(yc, 'cargar_cache_videos', return_value=(videos, info, '15/04/2026 10:00')), \
              patch.object(yc, 'cargar_estado_links', return_value=None), \
              patch.object(yc, 'cargar_estado_comentarios', return_value=None), \
@@ -402,6 +404,8 @@ class YouTubeCodesTests(unittest.TestCase):
 
         with patch.object(yc.sys, 'argv', ['YouTubeCodes.py', '--offline']), \
              patch.object(yc, 'hay_terminal_interactiva', return_value=True), \
+             patch.object(yc, 'bloquear_instancia'), \
+             patch.object(yc.atexit, 'register'), \
              patch.object(yc, 'cargar_cache_videos', return_value=(videos, info, '15/04/2026 10:00')), \
              patch.object(yc, 'cargar_estado_links', return_value=None), \
              patch.object(yc, 'cargar_estado_comentarios', return_value=None), \
