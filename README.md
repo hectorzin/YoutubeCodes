@@ -10,14 +10,16 @@ Herramienta para gestionar el bloque de cupones de AliExpress en las descripcion
 - Detecta vídeos cuya descripción superaría los 5.000 caracteres tras la actualización y los omite con aviso
 - Extrae todos los links de AliExpress y Amazon de tus vídeos y comprueba si cada producto sigue disponible
 - Distingue entre productos eliminados y productos no disponibles en tu región (AliExpress)
-- Distingue entre productos rotos y descatalogados (Amazon), con opción de comprobación a fondo via Chrome
-- Detecta y pausa cuando AliExpress muestra un CAPTCHA, para que puedas resolverlo manualmente
+- Distingue entre productos rotos, sin stock y errores técnicos de verificación
+- Usa un navegador aislado de Playwright para comprobar links sin tocar tu Chrome principal
+- Detecta cuando AliExpress muestra un CAPTCHA y puede reintentar en una ventana aislada
 - Mantiene una lista de vídeos excluidos (sorteos, directos, etc.) que no deberían tener cupones
+- Guarda copias de seguridad locales antes de actualizar descripciones o comentarios
 
 ## Requisitos
 
 - Python 3.11 o superior
-- Google Chrome instalado (solo para comprobar links de AliExpress y Amazon a fondo)
+- Navegadores de Playwright instalados (`python -m playwright install chromium`)
 
 ## Instalación
 
@@ -64,7 +66,7 @@ python YouTubeCodes.py --offline
 
 El modo offline **no llama a la API de YouTube en el arranque**, usando en su lugar el caché local guardado en la última ejecución normal (`cache_videos.json`). Esto es útil cuando quieres usar la herramienta sin gastar cuota de API, por ejemplo para comprobar links de AliExpress o Amazon, que no consumen cuota de YouTube.
 
-En modo offline el menú muestra un aviso en rojo recordando que los datos pueden estar desactualizados. Las opciones que modifican YouTube (actualizar cupones, actualizar comentarios) siguen disponibles — es decisión tuya usarlas sabiendo que trabajas con datos en caché.
+En modo offline el menú muestra un aviso en rojo recordando que los datos pueden estar desactualizados. Las opciones que modifican YouTube quedan ocultas para evitar escribir sobre el canal con datos de caché.
 
 > **Nota:** Para usar el modo offline es necesario haber ejecutado el programa al menos una vez en modo normal, ya que es entonces cuando se genera el caché.
 
@@ -91,5 +93,6 @@ El programa muestra el coste estimado antes de cada operación y enlaza a la con
 | `comentarios_estado.json` | Resultado del último escaneo de comentarios fijados |
 | `links_rotos.txt` | Reporte detallado de links con problemas |
 | `exclusiones.txt` | IDs de vídeos excluidos del bloque de cupones |
+| `backups/` | Copias de seguridad previas a cambios sobre vídeos y comentarios |
 
 Todos estos archivos están en `.gitignore` y no se suben al repositorio.

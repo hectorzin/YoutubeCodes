@@ -8,6 +8,8 @@ comentarios_estado.json
 cache_videos.json
 cupones.txt
 exclusiones.txt
+backups/
+.youtubecodes.lock
 screenshot_*.png
 __pycache__/
 *.pyc
