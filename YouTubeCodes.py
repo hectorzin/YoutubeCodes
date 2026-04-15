@@ -1829,29 +1829,11 @@ def accion_videos_sin_cupones(videos, patron):
         ('vídeos pendientes de bloque de cupones', 'dim'),
     )
     console.print(Panel(resumen, title='Pendientes', border_style='cyan'))
-
-    tabla = Table(box=box.SIMPLE_HEAVY, expand=True, header_style='bold cyan')
-    tabla.add_column('#', justify='right', style='cyan', no_wrap=True)
-    tabla.add_column('Título', style='white', overflow='fold')
-    tabla.add_column('Studio', style='blue', no_wrap=True)
-
-    for i, video in enumerate(sin_cupones, 1):
-        vid_id = video['id']
-        titulo = Text(video['snippet']['title'], style='white')
-        titulo.append('\n')
-        titulo.append(f'https://youtu.be/{vid_id}', style=f'cyan underline link https://www.youtube.com/watch?v={vid_id}')
-        tabla.add_row(
-            str(i),
-            titulo,
-            f'[link=https://studio.youtube.com/video/{vid_id}]Abrir[/link]',
-        )
-
-    console.print(tabla)
     console.print()
 
     opciones = [
         questionary.Choice(
-            title=f'{i:>3}. {video["snippet"]["title"]}',
+            title=f'{i:>3}. {video["snippet"]["title"]}  Link: https://youtu.be/{video["id"]}',
             value=video['id'],
         )
         for i, video in enumerate(sin_cupones, 1)

@@ -393,6 +393,21 @@ class YouTubeCodesTests(unittest.TestCase):
         guardados = guardar_mock.call_args.args[0]
         self.assertEqual([v['id'] for v in guardados], ['vid1'])
 
+    def test_accion_videos_sin_cupones_muestra_link_en_opciones(self):
+        videos = [
+            {'id': 'vid1', 'snippet': {'description': 'sin cupones', 'title': 'Video 1'}},
+        ]
+
+        def checkbox_stub(*args, **kwargs):
+            opciones = kwargs['choices']
+            self.assertIn('Link: https://youtu.be/vid1', opciones[0].title)
+            return ['__volver__']
+
+        with patch.object(yc, 'cargar_exclusiones', return_value=set()), \
+             patch.object(yc, 'checkbox_menu', side_effect=checkbox_stub), \
+             patch.object(yc.console, 'print'):
+            yc.accion_videos_sin_cupones(videos, r'BLOQUE_INEXISTENTE')
+
     def test_main_offline_arranca_y_sale_con_menu_simulado(self):
         videos = [{'id': 'vid1', 'snippet': {'description': '', 'title': 'Video 1'}}]
         info = {
