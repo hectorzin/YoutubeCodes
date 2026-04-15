@@ -82,6 +82,21 @@ class YouTubeCodesTests(unittest.TestCase):
         with patch.object(yc.questionary, 'select', return_value=AskStub('No')):
             self.assertFalse(yc.confirmar_menu('¿Continuar?'))
 
+    def test_mostrar_atajos_menu_principal_destaca_r_y_escape(self):
+        with patch.object(yc.console, 'print') as print_mock:
+            yc.mostrar_atajos_menu_principal(offline=False)
+        panel = print_mock.call_args.args[0]
+        self.assertIn('Atajos:', panel.renderable.plain)
+        self.assertIn('R', panel.renderable.plain)
+        self.assertIn('Esc', panel.renderable.plain)
+
+    def test_mostrar_atajos_menu_principal_offline_oculta_r(self):
+        with patch.object(yc.console, 'print') as print_mock:
+            yc.mostrar_atajos_menu_principal(offline=True)
+        panel = print_mock.call_args.args[0]
+        self.assertIn('Esc', panel.renderable.plain)
+        self.assertNotIn('recarga vídeos', panel.renderable.plain)
+
     def test_checkbox_menu_usa_indicadores_claros(self):
         with patch.object(yc.questionary, 'checkbox', return_value=AskStub(['uno'])) as checkbox_mock:
             respuesta = yc.checkbox_menu('Elige', choices=['uno', 'dos'])
@@ -175,6 +190,33 @@ class YouTubeCodesTests(unittest.TestCase):
             resultado = yc.actualizar_video(youtube, video, 'nuevo', r'bloque antiguo')
         self.assertEqual(resultado, 'match_ambiguo')
         youtube.videos.assert_not_called()
+
+    def test_accion_actualizar_cupones_no_hace_nada_si_pendientes_0(self):
+        youtube = MagicMock()
+        videos = [{
+            'id': 'vid1',
+            'snippet': {'description': 'inicio\nbloque nuevo\nfin', 'title': 'Video 1'},
+        }]
+        with patch.object(yc.console, 'print') as print_mock, \
+             patch.object(yc, 'confirmar_menu') as confirmar_mock, \
+             patch.object(yc, 'actualizar_video') as actualizar_mock:
+            yc.accion_actualizar_cupones(youtube, videos, 'bloque nuevo', r'bloque nuevo')
+        confirmar_mock.assert_not_called()
+        actualizar_mock.assert_not_called()
+        self.assertTrue(any('No hay vídeos pendientes' in str(call.args[0]) for call in print_mock.call_args_list if call.args))
+
+    def test_accion_actualizar_cupones_prompt_sin_markup_rich(self):
+        youtube = MagicMock()
+        videos = [{
+            'id': 'vid1',
+            'snippet': {'description': 'inicio\nbloque antiguo\nfin', 'title': 'Video 1'},
+        }]
+        with patch.object(yc.console, 'print'), \
+             patch.object(yc, 'confirmar_menu', return_value=False) as confirmar_mock, \
+             patch.object(yc, 'actualizar_video') as actualizar_mock:
+            yc.accion_actualizar_cupones(youtube, videos, 'bloque nuevo', r'bloque antiguo')
+        confirmar_mock.assert_called_once_with('¿Actualizar 1 vídeo?')
+        actualizar_mock.assert_not_called()
 
     def test_guardar_y_cargar_exclusiones(self):
         with tempfile.TemporaryDirectory() as tmpdir:

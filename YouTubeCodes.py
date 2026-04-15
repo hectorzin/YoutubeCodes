@@ -172,6 +172,17 @@ def confirmar_menu(mensaje, default='No'):
     return respuesta == 'Sí'
 
 
+def mostrar_atajos_menu_principal(offline=False):
+    texto = Text()
+    texto.append('Atajos: ', style='bold white')
+    if not offline:
+        texto.append('R', style='bold green')
+        texto.append(' recarga vídeos   ', style='white')
+    texto.append('Esc', style='bold yellow')
+    texto.append(' sale', style='white')
+    console.print(Panel.fit(texto, border_style='bright_black', padding=(0, 2)))
+
+
 def checkbox_menu(mensaje, choices, **kwargs):
     return habilitar_escape_para_volver(questionary.checkbox(
         mensaje,
@@ -1386,7 +1397,10 @@ def accion_actualizar_cupones(youtube, videos, nuevo_bloque, patron):
     console.print(f'  [dim]Vídeos a modificar: [bold]{pendientes}[/bold]  ·  coste estimado: [/dim][bold red]~{coste} unidades[/bold red]')
     console.print('  📊 [dim]Cuota:[/dim] [cyan]https://console.cloud.google.com/apis/api/youtube.googleapis.com/quotas[/cyan]')
     console.print()
-    if not confirmar_menu(f'¿Actualizar [bold]{pendientes}[/bold] vídeo{"s" if pendientes != 1 else ""}?'):
+    if pendientes == 0:
+        console.print('[green]✓ No hay vídeos pendientes: el bloque ya está actualizado.[/green]')
+        return
+    if not confirmar_menu(f'¿Actualizar {pendientes} vídeo{"s" if pendientes != 1 else ""}?'):
         console.print('[yellow]Cancelado.[/yellow]')
         return
 
@@ -1404,7 +1418,7 @@ def accion_actualizar_cupones(youtube, videos, nuevo_bloque, patron):
         console=console,
     ) as progress:
         task = progress.add_task('Actualizando', total=pendientes, titulo='')
-        for video in videos_con_cupones:
+        for video in pendientes_list:
             titulo = video['snippet']['title']
             resultado = actualizar_video(youtube, video, nuevo_bloque, patron)
             if resultado == 'ok':
@@ -1819,17 +1833,16 @@ def accion_videos_sin_cupones(videos, patron):
     tabla = Table(box=box.SIMPLE_HEAVY, expand=True, header_style='bold cyan')
     tabla.add_column('#', justify='right', style='cyan', no_wrap=True)
     tabla.add_column('Título', style='white', overflow='fold')
-    tabla.add_column('Link', style='cyan', no_wrap=True)
-    tabla.add_column('Video ID', style='cyan', no_wrap=True)
     tabla.add_column('Studio', style='blue', no_wrap=True)
 
     for i, video in enumerate(sin_cupones, 1):
         vid_id = video['id']
+        titulo = Text(video['snippet']['title'], style='white')
+        titulo.append('\n')
+        titulo.append(f'https://youtu.be/{vid_id}', style=f'cyan underline link https://www.youtube.com/watch?v={vid_id}')
         tabla.add_row(
             str(i),
-            video['snippet']['title'],
-            f'[link=https://www.youtube.com/watch?v={vid_id}]Link[/link]',
-            vid_id,
+            titulo,
             f'[link=https://studio.youtube.com/video/{vid_id}]Abrir[/link]',
         )
 
@@ -2242,6 +2255,7 @@ def main():
     while True:
         mostrar_menu(info_canal, len(videos), nuevo_bloque, calcular_stats(),
                      cargar_estado_links(), cargar_estado_comentarios(), offline)
+        mostrar_atajos_menu_principal(offline)
         opcion = select_menu(
             'Elige una opción:',
             choices=build_opciones(),
